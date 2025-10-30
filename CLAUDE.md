@@ -226,15 +226,37 @@ fn test_with_shared_state() {
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push and PR:
+Three GitHub Actions workflows automate quality checks, builds, and releases:
+
+### CI Pipeline (`.github/workflows/ci.yml`)
+Runs on: Push to master, Pull Requests, Manual trigger
 
 1. **Format Check**: `cargo fmt --check`
 2. **Linting**: `cargo clippy -- -D warnings`
-3. **Tests**: Matrix across Rust stable and beta
-4. **Coverage**: `cargo tarpaulin` with 100% requirement
-5. **Security Audit**: `cargo audit` for known vulnerabilities
+3. **Security Audit**: `cargo audit` for known vulnerabilities
+4. **Tests**: Matrix across Rust stable and beta
+5. **Coverage**: `cargo tarpaulin` with 90% minimum + PR comments
+6. **All Checks**: Aggregate status gate
 
-All checks must pass before merge.
+### Docker Pipeline (`.github/workflows/docker.yml`)
+Runs on: Push to master, Tags (v*.*.*), Pull Requests, Manual trigger
+
+1. **Multi-platform Build**: Linux amd64 + arm64
+2. **Push to GHCR**: GitHub Container Registry at `ghcr.io/duyet/llm-over-dns`
+3. **Security Scan**: Trivy vulnerability scanning on PRs
+4. **Smart Tagging**: Version tags, sha, branch, and latest
+
+### Release Pipeline (`.github/workflows/release.yml`)
+Runs on: Tags (v*.*.*), Manual trigger
+
+1. **Create Release**: Automated GitHub release with changelog
+2. **Cross-compile**: Build binaries for 6 platforms:
+   - Linux: x86_64-gnu, x86_64-musl, aarch64-gnu
+   - macOS: x86_64, aarch64 (Apple Silicon)
+   - Windows: x86_64
+3. **Upload Assets**: Binaries with SHA256 checksums
+
+All CI checks must pass before merge. Coverage threshold is 90%.
 
 ## Documentation
 
@@ -255,10 +277,11 @@ Generate API docs: `cargo doc --open`
 
 1. Write tests first (TDD approach)
 2. Implement feature
-3. Ensure `cargo test` passes with 100% coverage
-4. Run `cargo fmt` and `cargo clippy`
+3. Ensure `cargo test` passes with ≥90% coverage
+4. Run `cargo fmt` and `cargo clippy -- -D warnings`
 5. Update documentation if needed
-6. Ensure CI passes
+6. Push to branch and create PR
+7. Verify all CI checks pass (format, clippy, tests, coverage, audit)
 
 ### Modifying Configuration
 
@@ -280,6 +303,25 @@ DNS_PORT=5353 cargo run
 dig @localhost -p 5353 'hello world' TXT +short
 dig @localhost -p 5353 'what is rust' TXT +short
 ```
+
+### Creating a Release
+
+To create a new release with automated builds:
+
+```bash
+# Create and push a version tag
+git tag v0.1.0
+git push origin v0.1.0
+
+# This triggers:
+# 1. Release workflow - Creates GitHub release with binaries
+# 2. Docker workflow - Builds and pushes versioned Docker images
+```
+
+Release artifacts generated:
+- Cross-platform binaries (Linux, macOS, Windows) with SHA256 checksums
+- Docker images tagged with version, latest, and sha
+- Automated changelog from commit messages
 
 ### Debugging
 

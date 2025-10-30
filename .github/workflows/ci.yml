@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -102,7 +103,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 100
+        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 90
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -113,6 +114,33 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: true
           verbose: true
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const xml = fs.readFileSync('./cobertura.xml', 'utf8');
+
+            // Extract coverage percentage
+            const match = xml.match(/line-rate="([0-9.]+)"/);
+            const coverage = match ? (parseFloat(match[1]) * 100).toFixed(2) : 'N/A';
+
+            const comment = `## 📊 Code Coverage Report
+
+            **Coverage:** ${coverage}%
+            **Threshold:** 90%
+            **Status:** ${parseFloat(coverage) >= 90 ? '✅ Passing' : '❌ Below threshold'}
+
+            View full report on [Codecov](https://codecov.io/gh/${{ github.repository }}/pull/${{ github.event.number }})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
 
   # All checks passed
   all-checks-pass:

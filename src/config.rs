@@ -40,12 +40,15 @@ use std::env;
 /// * `openrouter_models` - List of LLM model identifiers for automatic fallback (e.g., ["nvidia/nemotron-nano-12b-v2-vl:free"])
 /// * `dns_port` - Port to listen for DNS queries (default: 53)
 /// * `dns_address` - Address to bind DNS server to (default: 0.0.0.0)
+/// * `system_prompt` - System prompt for LLM (default: "You are a helpful assistant. Keep responses concise and under 200 words.")
 #[derive(Debug, Clone)]
 pub struct Config {
     /// OpenRouter API key for authentication
     pub openrouter_api_key: String,
     /// List of model identifiers for LLM inference with automatic fallback
     pub openrouter_models: Vec<String>,
+    /// System prompt to guide LLM responses
+    pub system_prompt: String,
     /// DNS server listening port
     pub dns_port: u16,
     /// DNS server listening address
@@ -62,7 +65,10 @@ impl Config {
     ///
     /// - `OPENROUTER_API_KEY` - **Required**. Your OpenRouter API key
     /// - `OPENROUTER_MODEL` - Optional. Comma-separated list of models for automatic fallback.
-    ///   Defaults to `nvidia/nemotron-nano-12b-v2-vl:free`
+    ///   Defaults to: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`
+    ///   (fastest free models optimized for speed)
+    /// - `SYSTEM_PROMPT` - Optional. System prompt to guide LLM responses.
+    ///   Defaults to: "You are a helpful assistant. Keep responses concise and under 200 words."
     /// - `PORT` or `DNS_PORT` - Optional. Defaults to `53`. `PORT` takes precedence.
     /// - `HOST` or `DNS_ADDRESS` - Optional. Defaults to `0.0.0.0`. `HOST` takes precedence.
     ///
@@ -99,8 +105,11 @@ impl Config {
         let openrouter_api_key = env::var("OPENROUTER_API_KEY")
             .context("OPENROUTER_API_KEY environment variable not set")?;
 
+        // Default to fastest free models if not configured
+        let default_models = "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free";
+
         let openrouter_model_str = env::var("OPENROUTER_MODEL")
-            .unwrap_or_else(|_| "nvidia/nemotron-nano-12b-v2-vl:free".to_string());
+            .unwrap_or_else(|_| default_models.to_string());
 
         // Parse comma-separated models, trim whitespace, and filter out empty strings
         let openrouter_models: Vec<String> = openrouter_model_str
@@ -112,6 +121,10 @@ impl Config {
         if openrouter_models.is_empty() {
             return Err(anyhow::anyhow!("OPENROUTER_MODEL list cannot be empty"));
         }
+
+        // Load system prompt with sensible default
+        let system_prompt = env::var("SYSTEM_PROMPT")
+            .unwrap_or_else(|_| "You are a helpful assistant. Keep responses concise and under 200 words.".to_string());
 
         // Support both PORT/DNS_PORT and HOST/DNS_ADDRESS environment variables
         // Priority: PORT > DNS_PORT, HOST > DNS_ADDRESS
@@ -128,6 +141,7 @@ impl Config {
         Ok(Self {
             openrouter_api_key,
             openrouter_models,
+            system_prompt,
             dns_port,
             dns_address,
         })
@@ -146,6 +160,7 @@ mod tests {
         // Setup environment
         env::set_var("OPENROUTER_API_KEY", "test_key");
         env::set_var("OPENROUTER_MODEL", "test_model");
+        env::set_var("SYSTEM_PROMPT", "Test system prompt");
         env::set_var("DNS_PORT", "5353");
         env::set_var("DNS_ADDRESS", "127.0.0.1");
 
@@ -154,12 +169,14 @@ mod tests {
 
         assert_eq!(config.openrouter_api_key, "test_key");
         assert_eq!(config.openrouter_models, vec!["test_model".to_string()]);
+        assert_eq!(config.system_prompt, "Test system prompt");
         assert_eq!(config.dns_port, 5353);
         assert_eq!(config.dns_address, "127.0.0.1");
 
         // Cleanup
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("OPENROUTER_MODEL");
+        env::remove_var("SYSTEM_PROMPT");
         env::remove_var("DNS_PORT");
         env::remove_var("DNS_ADDRESS");
     }
@@ -170,6 +187,7 @@ mod tests {
         // Clean all environment variables first
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("OPENROUTER_MODEL");
+        env::remove_var("SYSTEM_PROMPT");
         env::remove_var("DNS_PORT");
         env::remove_var("DNS_ADDRESS");
 
@@ -181,8 +199,13 @@ mod tests {
         assert_eq!(config.openrouter_api_key, "test_key");
         assert_eq!(
             config.openrouter_models,
-            vec!["nvidia/nemotron-nano-12b-v2-vl:free".to_string()]
+            vec![
+                "nvidia/nemotron-nano-9b-v2:free".to_string(),
+                "meituan/longcat-flash-chat:free".to_string(),
+                "minimax/minimax-m2:free".to_string()
+            ]
         );
+        assert_eq!(config.system_prompt, "You are a helpful assistant. Keep responses concise and under 200 words.");
         assert_eq!(config.dns_port, 53);
         assert_eq!(config.dns_address, "0.0.0.0");
 

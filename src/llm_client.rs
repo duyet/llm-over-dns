@@ -41,6 +41,7 @@ struct OpenRouterResponse {
 pub struct LlmClient {
     api_key: String,
     models: Vec<String>,
+    system_prompt: String,
     http_client: Client,
     base_url: String,
 }
@@ -51,10 +52,11 @@ impl LlmClient {
     /// # Arguments
     /// * `api_key` - OpenRouter API key
     /// * `models` - List of model identifiers for automatic fallback
+    /// * `system_prompt` - System prompt to guide LLM responses
     ///
     /// # Returns
     /// * `Result<Self>` - Instance of LlmClient or error
-    pub fn new(api_key: String, models: Vec<String>) -> Result<Self> {
+    pub fn new(api_key: String, models: Vec<String>, system_prompt: String) -> Result<Self> {
         if api_key.is_empty() {
             return Err(anyhow!("API key cannot be empty"));
         }
@@ -71,6 +73,7 @@ impl LlmClient {
         Ok(Self {
             api_key,
             models,
+            system_prompt,
             http_client,
             base_url: "https://openrouter.ai/api/v1/chat/completions".to_string(),
         })
@@ -144,10 +147,16 @@ impl LlmClient {
     async fn query_single_model(&self, prompt: &str, model: &str) -> Result<String> {
         let request = OpenRouterRequest {
             model: model.to_string(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            }],
+            messages: vec![
+                Message {
+                    role: "system".to_string(),
+                    content: self.system_prompt.clone(),
+                },
+                Message {
+                    role: "user".to_string(),
+                    content: prompt.to_string(),
+                },
+            ],
         };
 
         let response = self
@@ -207,16 +216,25 @@ mod tests {
 
     #[test]
     fn test_llm_client_creation_success() {
-        let result = LlmClient::new("test_api_key".to_string(), vec!["test_model".to_string()]);
+        let result = LlmClient::new(
+            "test_api_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        );
         assert!(result.is_ok());
         let client = result.unwrap();
         assert_eq!(client.api_key, "test_api_key");
         assert_eq!(client.models, vec!["test_model".to_string()]);
+        assert_eq!(client.system_prompt, "Test system prompt");
     }
 
     #[test]
     fn test_llm_client_creation_empty_api_key() {
-        let result = LlmClient::new(String::new(), vec!["test_model".to_string()]);
+        let result = LlmClient::new(
+            String::new(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        );
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -226,7 +244,11 @@ mod tests {
 
     #[test]
     fn test_llm_client_creation_empty_models() {
-        let result = LlmClient::new("test_api_key".to_string(), vec![]);
+        let result = LlmClient::new(
+            "test_api_key".to_string(),
+            vec![],
+            "Test system prompt".to_string(),
+        );
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -237,7 +259,11 @@ mod tests {
     #[test]
     fn test_llm_client_creation_multiple_models() {
         let models = vec!["model1".to_string(), "model2".to_string(), "model3".to_string()];
-        let result = LlmClient::new("test_api_key".to_string(), models.clone());
+        let result = LlmClient::new(
+            "test_api_key".to_string(),
+            models.clone(),
+            "Test system prompt".to_string(),
+        );
         assert!(result.is_ok());
         let client = result.unwrap();
         assert_eq!(client.models, models);
@@ -263,9 +289,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_ok());
@@ -292,9 +322,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_ok());
@@ -306,7 +340,11 @@ mod tests {
         // Test that the client can be created successfully with timeout configuration
         // The timeout is set during Client::builder() and is verified indirectly through
         // the client creation process
-        let result = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()]);
+        let result = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        );
         assert!(result.is_ok());
         let client = result.unwrap();
 
@@ -328,9 +366,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -352,9 +394,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -373,9 +419,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -384,9 +434,13 @@ mod tests {
     #[tokio::test]
     async fn test_network_error() {
         // Use an invalid URL that will fail to connect
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url("http://invalid.local:99999".to_string());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url("http://invalid.local:99999".to_string());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -410,9 +464,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_api_key_123".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_api_key_123".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_ok());
@@ -420,8 +478,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_prompt() {
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client");
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client");
 
         let result = client.query("").await;
         assert!(result.is_err());
@@ -443,9 +505,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("invalid_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "invalid_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -464,9 +530,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -485,9 +555,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
@@ -499,9 +573,13 @@ mod tests {
 
     #[test]
     fn test_with_base_url() {
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url("http://custom.url".to_string());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url("http://custom.url".to_string());
 
         assert_eq!(client.base_url, "http://custom.url");
     }
@@ -518,9 +596,13 @@ mod tests {
             .create_async()
             .await;
 
-        let client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])
-            .expect("Failed to create client")
-            .with_base_url(server.url());
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
 
         let result = client.query("Test prompt").await;
         assert!(result.is_err());

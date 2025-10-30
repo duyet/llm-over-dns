@@ -159,8 +159,12 @@ impl Server {
     pub fn new(config: Config) -> Result<Self> {
         // Initialize LLM client
         let llm_client = Arc::new(
-            LlmClient::new(config.openrouter_api_key.clone(), config.openrouter_models.clone())
-                .context("Failed to create LLM client")?,
+            LlmClient::new(
+                config.openrouter_api_key.clone(),
+                config.openrouter_models.clone(),
+                config.system_prompt.clone(),
+            )
+            .context("Failed to create LLM client")?,
         );
 
         // Initialize chunker

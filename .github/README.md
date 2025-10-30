@@ -5,9 +5,9 @@ This directory contains GitHub-specific configuration for the LLM over DNS proje
 ## Directory Structure
 
 ### Workflows
-- **`workflows/ci.yml`** - Main CI/CD pipeline with all quality checks
-- **`workflows/coverage.yml`** - Code coverage generation and upload
-- **`workflows/quality.yml`** - Code quality checks and build verification
+- **`workflows/ci.yml`** - Main CI/CD pipeline with all quality checks, testing, and coverage
+- **`workflows/docker.yml`** - Multi-platform Docker image builds and GHCR deployment
+- **`workflows/release.yml`** - Automated GitHub releases with cross-platform binaries
 
 ### Templates
 - **`pull_request_template.md`** - Template for pull requests
@@ -44,31 +44,45 @@ This directory contains GitHub-specific configuration for the LLM over DNS proje
 ## Key Features
 
 - ✅ Automated testing on every push and PR
-- ✅ 100% code coverage requirement
-- ✅ Security vulnerability scanning
-- ✅ Code formatting and linting
-- ✅ Automated dependency updates
+- ✅ 90% code coverage requirement with PR comments
+- ✅ Security vulnerability scanning (cargo-audit + Trivy)
+- ✅ Code formatting and linting (rustfmt + clippy)
+- ✅ Multi-platform Docker builds (amd64, arm64)
+- ✅ Automated GitHub releases with binaries
+- ✅ Automated dependency updates (Dependabot)
 - ✅ Code review workflow
 - ✅ Status checks for branch protection
 
 ## Workflow Jobs
 
 ### CI Pipeline (`workflows/ci.yml`)
+Runs on: Push to master, Pull Requests, Manual trigger
 - **fmt** - Format code with rustfmt
-- **clippy** - Lint code with cargo clippy
+- **clippy** - Lint code with cargo clippy (-D warnings)
 - **audit** - Security audit with cargo-audit
-- **test** - Run tests across Rust versions
-- **coverage** - Verify 100% code coverage
+- **test** - Run tests across Rust stable and beta
+- **coverage** - Verify 90% code coverage + PR comments
 - **all-checks-pass** - Aggregate all results
 
-### Other Workflows
-- **coverage** - Code coverage detailed reporting
-- **quality** - Additional quality checks and build verification
+### Docker Pipeline (`workflows/docker.yml`)
+Runs on: Push to master, Tags (v*.*.*), Pull Requests, Manual trigger
+- **build-and-push** - Multi-platform build (amd64, arm64) + push to GHCR
+- **docker-test** - Test image + Trivy security scan (PRs only)
+
+### Release Pipeline (`workflows/release.yml`)
+Runs on: Tags (v*.*.*), Manual trigger
+- **create-release** - Create GitHub release with changelog
+- **build-binaries** - Cross-compile for 6 platforms (Linux, macOS, Windows)
 
 ## Environment Secrets
 
-Required for full functionality:
+Required secrets (Settings → Secrets and variables → Actions):
 - `CODECOV_TOKEN` - For uploading coverage to Codecov (optional for public repos)
+- `GITHUB_TOKEN` - Automatically provided by GitHub (no setup needed)
+
+Permissions required:
+- **packages: write** - For pushing Docker images to GHCR
+- **contents: write** - For creating releases
 
 ## Documentation Files
 

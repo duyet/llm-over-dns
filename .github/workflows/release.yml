@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=${{ inputs.tag }}
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            # First release, get all commits
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            # Get commits since previous tag
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Save to file for multiline output
+          echo "${CHANGELOG}" > CHANGELOG.txt
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body_path: CHANGELOG.txt
+          draft: false
+          prerelease: false
+
+  build-binaries:
+    name: Build Binary for ${{ matrix.target }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: llm-over-dns-linux-amd64
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: llm-over-dns-linux-amd64-musl
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: llm-over-dns-linux-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: llm-over-dns-macos-amd64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: llm-over-dns-macos-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: llm-over-dns-windows-amd64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+      - name: Strip binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+            strip target/${{ matrix.target }}/release/llm-over-dns
+          elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            strip target/${{ matrix.target }}/release/llm-over-dns
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            strip target/${{ matrix.target }}/release/llm-over-dns
+          fi
+
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz llm-over-dns
+          cd ../../..
+          sha256sum ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz > ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz.sha256
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path llm-over-dns.exe -DestinationPath ../../../${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip
+          cd ../../..
+          (Get-FileHash ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip -Algorithm SHA256).Hash | Out-File -Encoding ASCII ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip.sha256
+
+      - name: Upload release asset (Unix)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_name: ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload checksum (Unix)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz.sha256
+          asset_name: ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.tar.gz.sha256
+          asset_content_type: text/plain
+
+      - name: Upload release asset (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip
+          asset_name: ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip.sha256
+          asset_name: ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip.sha256
+          asset_content_type: text/plain

@@ -60,19 +60,21 @@ async fn main() -> Result<()> {
 
     info!("=== Example Queries ===");
     info!(
-        "  dig @{} -p {} 'hello world' TXT",
+        "  dig @{} -p {} 'hello world' TXT +time=30",
         config.dns_address, config.dns_port
     );
     info!(
-        "  dig @{} -p {} 'what is rust' TXT",
+        "  dig @{} -p {} 'what is rust' TXT +time=30",
         config.dns_address, config.dns_port
     );
     info!(
-        "  dig @{} -p {} 'explain quantum computing' TXT",
+        "  dig @{} -p {} 'explain quantum computing' TXT +time=30",
         config.dns_address, config.dns_port
     );
     info!("");
     info!("Note: DNS queries are sent directly to the LLM (no domain parsing)");
+    info!("Tip: Use +time=30 to increase dig timeout (LLM calls can take 5-15 seconds)");
+    info!("Tip: Add +short to show only TXT record content without DNS metadata");
     info!("");
 
     info!("=== Server Ready ===");
