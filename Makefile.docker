@@ -1,0 +1,146 @@
+.PHONY: docker-build docker-up docker-down docker-logs docker-test docker-clean docker-ps docker-shell help
+
+# Docker-related make targets for LLM over DNS
+
+help:
+	@echo "LLM over DNS - Docker Targets"
+	@echo "=============================="
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Docker Targets:"
+	@echo "  docker-build         - Build Docker image"
+	@echo "  docker-up            - Start service (builds if needed)"
+	@echo "  docker-down          - Stop service"
+	@echo "  docker-restart       - Restart service"
+	@echo "  docker-logs          - Show live logs"
+	@echo "  docker-logs-tail     - Show last 50 logs"
+	@echo "  docker-ps            - Show container status"
+	@echo "  docker-test          - Test DNS server"
+	@echo "  docker-shell         - Open shell in container"
+	@echo "  docker-clean         - Remove image and containers"
+	@echo "  docker-size          - Show Docker image size"
+	@echo ""
+	@echo "Quick Start:"
+	@echo "  1. make docker-build"
+	@echo "  2. make docker-up"
+	@echo "  3. make docker-test"
+	@echo ""
+
+# Build Docker image
+docker-build:
+	@echo "Building Docker image..."
+	@docker-compose build
+	@echo "✓ Build complete"
+
+# Start service
+docker-up:
+	@echo "Starting LLM over DNS service..."
+	@docker-compose up -d
+	@echo "✓ Service started"
+	@echo ""
+	@docker-compose ps
+	@echo ""
+	@echo "Testing DNS server..."
+	@sleep 2
+	@docker-compose exec llm-dns timeout 5 bash -c 'echo -e "\x00\x00\x00\x00\x00\x00\x00\x00" | nc -u localhost 53' && echo "✓ DNS is responding" || echo "⚠ DNS not responding yet"
+
+# Stop service
+docker-down:
+	@echo "Stopping service..."
+	@docker-compose down
+	@echo "✓ Service stopped"
+
+# Restart service
+docker-restart:
+	@echo "Restarting service..."
+	@docker-compose restart
+	@echo "✓ Service restarted"
+
+# Show live logs
+docker-logs:
+	@docker-compose logs -f llm-dns
+
+# Show last 50 logs
+docker-logs-tail:
+	@docker-compose logs --tail=50 llm-dns
+
+# Show container status
+docker-ps:
+	@docker-compose ps
+
+# Test DNS server
+docker-test:
+	@echo "Testing DNS server..."
+	@echo ""
+	@if command -v dig &> /dev/null; then \
+		echo "Testing with dig:"; \
+		dig @localhost hello.world TXT +short || echo "No response"; \
+	fi
+	@echo ""
+	@echo "Testing with container shell:"
+	@docker-compose exec llm-dns timeout 5 /app/llm-over-dns 2>&1 | head -5 || true
+
+# Open shell in container
+docker-shell:
+	@docker-compose exec llm-dns /bin/bash
+
+# Clean up Docker resources
+docker-clean:
+	@echo "Cleaning up Docker resources..."
+	@docker-compose down --remove-orphans
+	@docker rmi llm-over-dns:latest || true
+	@echo "✓ Cleanup complete"
+
+# Show Docker image size
+docker-size:
+	@echo "Docker image size:"
+	@docker images llm-over-dns --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" || echo "Image not found"
+
+# Development targets
+docker-dev-build:
+	@echo "Building development image..."
+	@docker build -t llm-over-dns:dev --target builder .
+
+docker-shell-builder:
+	@docker run -it --rm -v $(PWD):/workspace llm-over-dns:dev /bin/bash
+
+# CI/CD targets
+docker-push:
+	@echo "Pushing image to registry..."
+	@echo "Usage: make docker-push REGISTRY=myregistry.com"
+	@docker tag llm-over-dns:latest ${REGISTRY}/llm-over-dns:latest
+	@docker push ${REGISTRY}/llm-over-dns:latest
+	@echo "✓ Image pushed"
+
+docker-tag-version:
+	@echo "Tagging image with version..."
+	@echo "Usage: make docker-tag-version VERSION=v0.1.0"
+	@docker tag llm-over-dns:latest llm-over-dns:${VERSION}
+	@docker tag llm-over-dns:latest llm-over-dns:latest
+	@echo "✓ Tags created"
+
+# Validation targets
+docker-validate-compose:
+	@echo "Validating docker-compose.yml..."
+	@docker-compose config > /dev/null && echo "✓ Valid" || echo "✗ Invalid"
+
+docker-validate-dockerfile:
+	@echo "Validating Dockerfile..."
+	@docker build --dry-run . 2>&1 | grep -q "ERROR" && echo "✗ Invalid" || echo "✓ Valid" || true
+
+# Info targets
+docker-info:
+	@echo "Docker Information:"
+	@echo "==================="
+	@docker --version
+	@docker-compose --version
+	@echo ""
+	@echo "Image Status:"
+	@docker images llm-over-dns || echo "No images found"
+	@echo ""
+	@echo "Container Status:"
+	@docker-compose ps || echo "No containers found"
+	@echo ""
+	@echo "Disk Usage:"
+	@docker system df | grep -A 5 "Images"

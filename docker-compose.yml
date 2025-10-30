@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  llm-dns:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-over-dns
+
+    # Network configuration
+    ports:
+      # DNS server on port 53 (UDP protocol)
+      - "53:53/udp"
+
+    # Environment variables configuration
+    environment:
+      # OpenRouter API credentials
+      # Required: Set OPENROUTER_API_KEY before deployment
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+      # LLM model selection
+      # Free tier model from OpenRouter
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
+
+      # DNS Server configuration
+      DNS_ADDRESS: ${DNS_ADDRESS:-0.0.0.0}
+      DNS_PORT: ${DNS_PORT:-53}
+
+      # Logging level (trace, debug, info, warn, error)
+      RUST_LOG: ${RUST_LOG:-info}
+
+    # Restart policy
+    # unless-stopped: Automatically restart unless explicitly stopped
+    restart: unless-stopped
+
+    # Resource limits (optional, adjust based on your needs)
+    # Uncomment and modify as needed for your deployment
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 256M
+
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "timeout", "2", "bash", "-c", "echo -e '\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00' | nc -u localhost 53 > /dev/null 2>&1 && echo OK || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Logging configuration (optional)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Capabilities for DNS port binding
+    # Note: DNS uses port 53 which requires elevated privileges
+    # We use cap_net_bind_service to allow binding to privileged ports
+    cap_add:
+      - NET_BIND_SERVICE
+
+    # Drop unnecessary capabilities for security
+    cap_drop:
+      - ALL
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+# Networks configuration
+networks:
+  default:
+    name: llm-dns-network
+    driver: bridge

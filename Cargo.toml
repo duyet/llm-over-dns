@@ -1,0 +1,66 @@
+[package]
+name = "llm-over-dns"
+version = "0.1.0"
+edition = "2021"
+authors = ["Duyet <me@duyet.net>"]
+description = "DNS server that responds to TXT queries with LLM responses via OpenRouter"
+license = "MIT"
+repository = "https://github.com/duyet/llm-over-dns"
+
+[dependencies]
+# DNS server
+hickory-dns = "0.25.2"
+hickory-server = "0.25.2"
+hickory-proto = "0.25.2"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# HTTP client for OpenRouter
+reqwest = { version = "0.11", features = ["json"] }
+
+# JSON handling
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Environment variables
+dotenvy = "0.15"
+
+# Async trait support
+async-trait = "0.1"
+
+[dev-dependencies]
+# HTTP mocking for unit tests
+mockito = "1.2"
+
+# Test utilities
+tokio-test = "0.4"
+
+# DNS client for E2E tests
+hickory-client = "0.25.2"
+
+# Assertions
+assert_matches = "1.5"
+pretty_assertions = "1.4"
+
+# Serial test execution for tests with shared state
+serial_test = "3.0"
+
+# Async utilities for concurrent tests
+futures = "0.3"
+
+[lib]
+name = "llm_over_dns"
+path = "src/lib.rs"
+
+[[bin]]
+name = "llm-over-dns"
+path = "src/main.rs"

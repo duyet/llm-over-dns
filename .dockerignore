@@ -1,0 +1,70 @@
+# Rust build artifacts
+/target
+*.rlib
+*.rmeta
+
+# Cargo lock for libraries (binaries should keep it)
+# Cargo.lock is intentionally not ignored to ensure reproducible builds
+
+# Environment files (secrets)
+.env
+.env.local
+.env*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.vim
+.vs/
+.DS_Store
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+.travis.yml
+
+# Development and testing
+.claude/
+*.log
+coverage/
+cobertura.xml
+tarpaulin-report.html
+*.profraw
+*.profdata
+
+# Documentation
+README.md
+CHANGELOG.md
+docs/
+examples/
+
+# OS specific
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+
+# Development scripts
+scripts/
+Makefile
+justfile
+
+# Docker files (not needed in build context)
+docker-compose.override.yml
+Dockerfile.dev
+.dockerignore
+
+# Other unnecessary files
+LICENSE
+.editorconfig
+.gitignore
+.prettierignore

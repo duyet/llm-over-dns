@@ -1,0 +1,45 @@
+codecov:
+  require_ci_to_pass: yes
+
+coverage:
+  precision: 2
+  round: down
+  range:
+    - 70.0
+    - 100.0
+
+ignore:
+  - "tests"
+  - "benches"
+  - "examples"
+
+status:
+  project:
+    default:
+      target: 100
+      threshold: 0
+      base: auto
+      branches:
+        - main
+        - develop
+    patch:
+      default:
+        target: 100
+        threshold: 0
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: no
+  require_base: no
+  require_head: yes
+  delete_orphaned_comments: yes
+
+github:
+  compact: yes
+
+flags:
+  unittests:
+    carryforward: yes
+  integration:
+    carryforward: yes

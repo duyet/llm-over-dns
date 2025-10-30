@@ -1,0 +1,58 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.helix/
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Coverage
+coverage/
+cobertura.xml
+tarpaulin-report.html
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+lcov.info
+*.lcov
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+
+# Documentation build
+/doc
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# Test artifacts
+*.test
+
+# Benchmarking
+/benches/target

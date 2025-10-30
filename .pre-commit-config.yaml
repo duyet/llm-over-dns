@@ -1,0 +1,68 @@
+# Pre-commit hooks configuration
+# Install with: pip install pre-commit && pre-commit install
+
+repos:
+  # Rust formatting with rustfmt
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: Format Rust code
+        entry: cargo fmt --
+        language: system
+        types: [rust]
+
+  # Linting with Clippy
+      - id: clippy
+        name: Clippy Rust linter
+        entry: cargo clippy --all-targets --all-features --
+        language: system
+        types: [rust]
+        stages: [commit]
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of file
+      - id: check-yaml
+        name: Check YAML files
+        args: ['--unsafe']
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+      - id: check-json
+        name: Check JSON files
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: mixed-line-ending
+        name: Fix mixed line endings
+        args: ['--fix=lf']
+
+  # Security checks
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.4
+    hooks:
+      - id: detect-secrets
+        name: Detect secrets
+        args: ['--baseline', '.secrets.baseline']
+        stages: [commit]
+
+# Configuration
+files: |
+  (?x)^(
+    src/.*\.rs|
+    Cargo\.toml|
+    Cargo\.lock
+  )
+exclude: |
+  (?x)^(
+    target/.*|
+    \.cargo/.*|
+    \.git/.*
+  )
+fail_fast: false
+default_stages: [commit]

@@ -1,0 +1,17 @@
+# Code ownership configuration for automated code review requests
+
+# All files default to these owners
+* @duyet
+
+# CI/CD configuration
+.github/ @duyet
+.github/workflows/ @duyet
+Cargo.toml @duyet
+Cargo.lock @duyet
+
+# Source code
+/src/ @duyet
+
+# Configuration
+.env.example @duyet
+.gitignore @duyet
