@@ -16,6 +16,18 @@ struct Message {
 struct OpenRouterRequest {
     model: String,
     messages: Vec<Message>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
 }
 
 /// Message in OpenRouter response
@@ -44,6 +56,12 @@ pub struct LlmClient {
     system_prompt: String,
     http_client: Client,
     base_url: String,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
+    top_p: Option<f32>,
+    top_k: Option<u32>,
+    frequency_penalty: Option<f32>,
+    presence_penalty: Option<f32>,
 }
 
 impl LlmClient {
@@ -53,10 +71,26 @@ impl LlmClient {
     /// * `api_key` - OpenRouter API key
     /// * `models` - List of model identifiers for automatic fallback
     /// * `system_prompt` - System prompt to guide LLM responses
+    /// * `temperature` - Optional temperature for sampling (0.0-2.0)
+    /// * `max_tokens` - Optional maximum response length in tokens
+    /// * `top_p` - Optional nucleus sampling parameter (0.0-1.0)
+    /// * `top_k` - Optional top-k sampling parameter
+    /// * `frequency_penalty` - Optional frequency penalty (0.0-2.0)
+    /// * `presence_penalty` - Optional presence penalty (0.0-2.0)
     ///
     /// # Returns
     /// * `Result<Self>` - Instance of LlmClient or error
-    pub fn new(api_key: String, models: Vec<String>, system_prompt: String) -> Result<Self> {
+    pub fn new(
+        api_key: String,
+        models: Vec<String>,
+        system_prompt: String,
+        temperature: Option<f32>,
+        max_tokens: Option<u32>,
+        top_p: Option<f32>,
+        top_k: Option<u32>,
+        frequency_penalty: Option<f32>,
+        presence_penalty: Option<f32>,
+    ) -> Result<Self> {
         if api_key.is_empty() {
             return Err(anyhow!("API key cannot be empty"));
         }
@@ -76,6 +110,12 @@ impl LlmClient {
             system_prompt,
             http_client,
             base_url: "https://openrouter.ai/api/v1/chat/completions".to_string(),
+            temperature,
+            max_tokens,
+            top_p,
+            top_k,
+            frequency_penalty,
+            presence_penalty,
         })
     }
 
@@ -157,6 +197,12 @@ impl LlmClient {
                     content: prompt.to_string(),
                 },
             ],
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            top_p: self.top_p,
+            top_k: self.top_k,
+            frequency_penalty: self.frequency_penalty,
+            presence_penalty: self.presence_penalty,
         };
 
         let response = self
@@ -220,6 +266,7 @@ mod tests {
             "test_api_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -234,6 +281,7 @@ mod tests {
             String::new(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         );
         assert!(result.is_err());
         assert!(result
@@ -248,6 +296,7 @@ mod tests {
             "test_api_key".to_string(),
             vec![],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         );
         assert!(result.is_err());
         assert!(result
@@ -263,6 +312,7 @@ mod tests {
             "test_api_key".to_string(),
             models.clone(),
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -293,6 +343,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -326,6 +377,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -344,6 +396,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -370,6 +423,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -398,6 +452,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -423,6 +478,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -438,6 +494,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url("http://invalid.local:99999".to_string());
@@ -468,6 +525,7 @@ mod tests {
             "test_api_key_123".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -482,6 +540,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client");
 
@@ -509,6 +568,7 @@ mod tests {
             "invalid_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -534,6 +594,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -559,6 +620,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -577,6 +639,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url("http://custom.url".to_string());
@@ -600,6 +663,7 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -620,7 +684,10 @@ mod tests {
             .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "model1",
-                "messages": [{"role": "user", "content": "Test prompt"}]
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ]
             })))
             .with_status(429)
             .with_header("content-type", "application/json")
@@ -633,7 +700,10 @@ mod tests {
             .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "model2",
-                "messages": [{"role": "user", "content": "Test prompt"}]
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ]
             })))
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -643,7 +713,9 @@ mod tests {
 
         let client = LlmClient::new(
             "test_key".to_string(),
-            vec!["model1".to_string(), "model2".to_string()]
+            vec!["model1".to_string(), "model2".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -662,7 +734,10 @@ mod tests {
             .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "model1",
-                "messages": [{"role": "user", "content": "Test prompt"}]
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ]
             })))
             .with_status(404)
             .with_header("content-type", "application/json")
@@ -675,7 +750,10 @@ mod tests {
             .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "model2",
-                "messages": [{"role": "user", "content": "Test prompt"}]
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ]
             })))
             .with_status(500)
             .with_header("content-type", "application/json")
@@ -688,7 +766,10 @@ mod tests {
             .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
             .match_body(mockito::Matcher::Json(serde_json::json!({
                 "model": "model3",
-                "messages": [{"role": "user", "content": "Test prompt"}]
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ]
             })))
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -698,7 +779,9 @@ mod tests {
 
         let client = LlmClient::new(
             "test_key".to_string(),
-            vec!["model1".to_string(), "model2".to_string(), "model3".to_string()]
+            vec!["model1".to_string(), "model2".to_string(), "model3".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -724,7 +807,9 @@ mod tests {
 
         let client = LlmClient::new(
             "test_key".to_string(),
-            vec!["model1".to_string(), "model2".to_string()]
+            vec!["model1".to_string(), "model2".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -732,5 +817,51 @@ mod tests {
         let result = client.query("Test prompt").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Rate limit"));
+    }
+
+    #[tokio::test]
+    async fn test_parameters_included_in_request() {
+        let mut server = mockito::Server::new_async().await;
+
+        let mock_response = r#"{"choices": [{"message": {"content": "test"}}]}"#;
+
+        // Verify all parameters are included in the request body
+        let _mock = server
+            .mock("POST", mockito::Matcher::Regex(r"^/.*".to_string()))
+            .match_body(mockito::Matcher::Json(serde_json::json!({
+                "model": "test_model",
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test prompt"}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 500,
+                "top_p": 0.9,
+                "top_k": 40,
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.5
+            })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(mock_response)
+            .create_async()
+            .await;
+
+        let client = LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            Some(0.7),
+            Some(500),
+            Some(0.9),
+            Some(40),
+            Some(0.5),
+            Some(0.5),
+        )
+        .expect("Failed to create client")
+        .with_base_url(server.url());
+
+        let result = client.query("Test prompt").await;
+        assert!(result.is_ok());
     }
 }

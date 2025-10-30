@@ -163,6 +163,12 @@ impl Server {
                 config.openrouter_api_key.clone(),
                 config.openrouter_models.clone(),
                 config.system_prompt.clone(),
+                config.temperature,
+                config.max_tokens,
+                config.top_p,
+                config.top_k,
+                config.frequency_penalty,
+                config.presence_penalty,
             )
             .context("Failed to create LLM client")?,
         );
@@ -427,8 +433,15 @@ mod tests {
         let config = Config {
             openrouter_api_key: "test_key".to_string(),
             openrouter_models: vec!["test_model".to_string()],
+            system_prompt: "Test system prompt".to_string(),
             dns_address: "127.0.0.1".to_string(),
             dns_port: 15353,
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            top_k: None,
+            frequency_penalty: None,
+            presence_penalty: None,
         };
 
         let server = Server::new(config)?;
@@ -438,7 +451,15 @@ mod tests {
 
     #[test]
     fn test_handler_creation() {
-        let llm_client = Arc::new(LlmClient::new("key".to_string(), vec!["model".to_string()]).unwrap());
+        let llm_client = Arc::new(
+            LlmClient::new(
+                "key".to_string(),
+                vec!["model".to_string()],
+                "Test system prompt".to_string(),
+                None, None, None, None, None, None,
+            )
+            .unwrap(),
+        );
         let chunker = Arc::new(Chunker::new());
         let dns_handler = Arc::new(DnsHandler::new());
 

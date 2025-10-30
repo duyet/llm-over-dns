@@ -8,7 +8,12 @@ use std::env;
 /// Test LLM client creation
 #[test]
 fn test_llm_client_creation() -> Result<()> {
-    let _client = LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?;
+    let _client = LlmClient::new(
+        "test_key".to_string(),
+        vec!["test_model".to_string()],
+        "Test system prompt".to_string(),
+        None, None, None, None, None, None,
+    )?;
     Ok(())
 }
 
@@ -317,8 +322,13 @@ async fn test_e2e_dns_to_llm_to_response() -> Result<()> {
 
     // Create components
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let chunker = Arc::new(Chunker::new());
     let dns_handler = Arc::new(DnsHandler::new());
@@ -365,8 +375,13 @@ async fn test_e2e_long_response_chunking() -> Result<()> {
 
     // Create components
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let chunker = Arc::new(Chunker::new());
     let dns_handler = Arc::new(DnsHandler::new());
@@ -408,8 +423,13 @@ async fn test_e2e_llm_rate_limit_error() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -437,8 +457,13 @@ async fn test_e2e_llm_server_error() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -466,8 +491,13 @@ async fn test_e2e_llm_unauthorized() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("invalid_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "invalid_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -495,8 +525,13 @@ async fn test_e2e_llm_invalid_json() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -543,8 +578,13 @@ async fn test_e2e_network_timeout() -> Result<()> {
 
     // Use invalid URL that will fail to connect
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url("http://invalid.local:99999".to_string()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url("http://invalid.local:99999".to_string()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -584,8 +624,13 @@ async fn test_concurrent_requests() -> Result<()> {
 
     // Create shared components
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
 
@@ -645,8 +690,13 @@ async fn test_performance_single_request() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let dns_handler = Arc::new(DnsHandler::new());
     let chunker = Arc::new(Chunker::new());
@@ -698,8 +748,13 @@ async fn test_e2e_empty_llm_response() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let chunker = Arc::new(Chunker::new());
     let dns_handler = Arc::new(DnsHandler::new());
@@ -736,8 +791,13 @@ async fn test_e2e_unicode_handling() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let chunker = Arc::new(Chunker::new());
     let dns_handler = Arc::new(DnsHandler::new());
@@ -782,8 +842,13 @@ async fn test_e2e_maximum_dns_response_size() -> Result<()> {
         .await;
 
     let llm_client = Arc::new(
-        LlmClient::new("test_key".to_string(), vec!["test_model".to_string()])?
-            .with_base_url(server.url()),
+        LlmClient::new(
+            "test_key".to_string(),
+            vec!["test_model".to_string()],
+            "Test system prompt".to_string(),
+            None, None, None, None, None, None,
+        )?
+        .with_base_url(server.url()),
     );
     let chunker = Arc::new(Chunker::new());
     let dns_handler = Arc::new(DnsHandler::new());
