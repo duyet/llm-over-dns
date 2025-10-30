@@ -456,7 +456,12 @@ mod tests {
                 "key".to_string(),
                 vec!["model".to_string()],
                 "Test system prompt".to_string(),
-                None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
             .unwrap(),
         );

@@ -132,8 +132,8 @@ impl Config {
         // Default to fastest free models if not configured
         let default_models = "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free";
 
-        let openrouter_model_str = env::var("OPENROUTER_MODEL")
-            .unwrap_or_else(|_| default_models.to_string());
+        let openrouter_model_str =
+            env::var("OPENROUTER_MODEL").unwrap_or_else(|_| default_models.to_string());
 
         // Parse comma-separated models, trim whitespace, and filter out empty strings
         let openrouter_models: Vec<String> = openrouter_model_str
@@ -147,8 +147,9 @@ impl Config {
         }
 
         // Load system prompt with sensible default
-        let system_prompt = env::var("SYSTEM_PROMPT")
-            .unwrap_or_else(|_| "You are a helpful assistant. Keep responses concise and under 200 words.".to_string());
+        let system_prompt = env::var("SYSTEM_PROMPT").unwrap_or_else(|_| {
+            "You are a helpful assistant. Keep responses concise and under 200 words.".to_string()
+        });
 
         // Support both PORT/DNS_PORT and HOST/DNS_ADDRESS environment variables
         // Priority: PORT > DNS_PORT, HOST > DNS_ADDRESS
@@ -167,8 +168,12 @@ impl Config {
         let max_tokens = env::var("MAX_TOKENS").ok().and_then(|s| s.parse().ok());
         let top_p = env::var("TOP_P").ok().and_then(|s| s.parse().ok());
         let top_k = env::var("TOP_K").ok().and_then(|s| s.parse().ok());
-        let frequency_penalty = env::var("FREQUENCY_PENALTY").ok().and_then(|s| s.parse().ok());
-        let presence_penalty = env::var("PRESENCE_PENALTY").ok().and_then(|s| s.parse().ok());
+        let frequency_penalty = env::var("FREQUENCY_PENALTY")
+            .ok()
+            .and_then(|s| s.parse().ok());
+        let presence_penalty = env::var("PRESENCE_PENALTY")
+            .ok()
+            .and_then(|s| s.parse().ok());
 
         Ok(Self {
             openrouter_api_key,
@@ -256,7 +261,10 @@ mod tests {
                 "minimax/minimax-m2:free".to_string()
             ]
         );
-        assert_eq!(config.system_prompt, "You are a helpful assistant. Keep responses concise and under 200 words.");
+        assert_eq!(
+            config.system_prompt,
+            "You are a helpful assistant. Keep responses concise and under 200 words."
+        );
         assert_eq!(config.dns_port, 53);
         assert_eq!(config.dns_address, "0.0.0.0");
         // Optional parameters should be None when not set
@@ -297,7 +305,10 @@ mod tests {
         let result = Config::from_env();
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid PORT/DNS_PORT"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid PORT/DNS_PORT"));
 
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("DNS_PORT");
@@ -307,18 +318,18 @@ mod tests {
     #[serial]
     fn test_config_multiple_models() {
         env::set_var("OPENROUTER_API_KEY", "test_key");
-        env::set_var(
-            "OPENROUTER_MODEL",
-            "model1,model2,model3"
-        );
+        env::set_var("OPENROUTER_MODEL", "model1,model2,model3");
 
         let config = Config::from_env().expect("Failed to load config");
 
-        assert_eq!(config.openrouter_models, vec![
-            "model1".to_string(),
-            "model2".to_string(),
-            "model3".to_string()
-        ]);
+        assert_eq!(
+            config.openrouter_models,
+            vec![
+                "model1".to_string(),
+                "model2".to_string(),
+                "model3".to_string()
+            ]
+        );
 
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("OPENROUTER_MODEL");
@@ -328,18 +339,18 @@ mod tests {
     #[serial]
     fn test_config_multiple_models_with_spaces() {
         env::set_var("OPENROUTER_API_KEY", "test_key");
-        env::set_var(
-            "OPENROUTER_MODEL",
-            "model1 , model2 ,  model3  "
-        );
+        env::set_var("OPENROUTER_MODEL", "model1 , model2 ,  model3  ");
 
         let config = Config::from_env().expect("Failed to load config");
 
-        assert_eq!(config.openrouter_models, vec![
-            "model1".to_string(),
-            "model2".to_string(),
-            "model3".to_string()
-        ]);
+        assert_eq!(
+            config.openrouter_models,
+            vec![
+                "model1".to_string(),
+                "model2".to_string(),
+                "model3".to_string()
+            ]
+        );
 
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("OPENROUTER_MODEL");
