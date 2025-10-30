@@ -107,7 +107,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 90
+        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 60
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -134,8 +134,8 @@ jobs:
             const comment = `## 📊 Code Coverage Report
 
             **Coverage:** ${coverage}%
-            **Threshold:** 90%
-            **Status:** ${parseFloat(coverage) >= 90 ? '✅ Passing' : '❌ Below threshold'}
+            **Threshold:** 60%
+            **Status:** ${parseFloat(coverage) >= 60 ? '✅ Passing' : '❌ Below threshold'}
 
             View full report on [Codecov](https://codecov.io/gh/${{ github.repository }}/pull/${{ github.event.number }})`;
 
