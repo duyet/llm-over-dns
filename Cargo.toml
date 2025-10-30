@@ -17,7 +17,7 @@ hickory-proto = "0.25.2"
 tokio = { version = "1.35", features = ["full"] }
 
 # HTTP client for OpenRouter
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # JSON handling
 serde = { version = "1.0", features = ["derive"] }
