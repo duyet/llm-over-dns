@@ -11,7 +11,7 @@ repository = "https://github.com/duyet/llm-over-dns"
 # DNS server
 hickory-dns = "0.25.2"
 hickory-server = "0.25.2"
-hickory-proto = "0.25.2"
+hickory-proto = "0.26.0"
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
