@@ -80,6 +80,7 @@ impl LlmClient {
     ///
     /// # Returns
     /// * `Result<Self>` - Instance of LlmClient or error
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         api_key: String,
         models: Vec<String>,
@@ -151,7 +152,12 @@ impl LlmClient {
 
         // Try each model in order
         for (index, model) in self.models.iter().enumerate() {
-            debug!("Attempting model {}/{}: {}", index + 1, self.models.len(), model);
+            debug!(
+                "Attempting model {}/{}: {}",
+                index + 1,
+                self.models.len(),
+                model
+            );
 
             match self.query_single_model(prompt, model).await {
                 Ok(response) => {
@@ -232,9 +238,7 @@ impl LlmClient {
                 let content = body.choices[0].message.content.clone();
                 Ok(content)
             }
-            reqwest::StatusCode::TOO_MANY_REQUESTS => {
-                Err(anyhow!("Rate limit exceeded (429)"))
-            }
+            reqwest::StatusCode::TOO_MANY_REQUESTS => Err(anyhow!("Rate limit exceeded (429)")),
             reqwest::StatusCode::NOT_FOUND => {
                 Err(anyhow!("Model not found or data policy restriction (404)"))
             }
@@ -266,7 +270,12 @@ mod tests {
             "test_api_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -281,7 +290,12 @@ mod tests {
             String::new(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(result.is_err());
         assert!(result
@@ -296,7 +310,12 @@ mod tests {
             "test_api_key".to_string(),
             vec![],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(result.is_err());
         assert!(result
@@ -307,12 +326,21 @@ mod tests {
 
     #[test]
     fn test_llm_client_creation_multiple_models() {
-        let models = vec!["model1".to_string(), "model2".to_string(), "model3".to_string()];
+        let models = vec![
+            "model1".to_string(),
+            "model2".to_string(),
+            "model3".to_string(),
+        ];
         let result = LlmClient::new(
             "test_api_key".to_string(),
             models.clone(),
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -343,7 +371,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -377,7 +410,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -396,7 +434,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(result.is_ok());
         let client = result.unwrap();
@@ -423,7 +466,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -452,7 +500,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -478,7 +531,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -494,7 +552,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url("http://invalid.local:99999".to_string());
@@ -525,7 +588,12 @@ mod tests {
             "test_api_key_123".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -540,7 +608,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -568,7 +641,12 @@ mod tests {
             "invalid_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -594,7 +672,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -620,7 +703,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -639,7 +727,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url("http://custom.url".to_string());
@@ -663,7 +756,12 @@ mod tests {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -715,7 +813,12 @@ mod tests {
             "test_key".to_string(),
             vec!["model1".to_string(), "model2".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -779,9 +882,18 @@ mod tests {
 
         let client = LlmClient::new(
             "test_key".to_string(),
-            vec!["model1".to_string(), "model2".to_string(), "model3".to_string()],
+            vec![
+                "model1".to_string(),
+                "model2".to_string(),
+                "model3".to_string(),
+            ],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
@@ -809,7 +921,12 @@ mod tests {
             "test_key".to_string(),
             vec!["model1".to_string(), "model2".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .expect("Failed to create client")
         .with_base_url(server.url());
