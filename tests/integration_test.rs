@@ -12,7 +12,12 @@ fn test_llm_client_creation() -> Result<()> {
         "test_key".to_string(),
         vec!["test_model".to_string()],
         "Test system prompt".to_string(),
-        None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )?;
     Ok(())
 }
@@ -38,7 +43,10 @@ fn test_config_from_environment() -> Result<()> {
 
     // Verify config values
     assert_eq!(config.openrouter_api_key, "test_key_from_env");
-    assert_eq!(config.openrouter_models, vec!["test_model_from_env".to_string()]);
+    assert_eq!(
+        config.openrouter_models,
+        vec!["test_model_from_env".to_string()]
+    );
     assert_eq!(config.dns_port, 5353);
     assert_eq!(config.dns_address, "127.0.0.1");
 
@@ -326,7 +334,12 @@ async fn test_e2e_dns_to_llm_to_response() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -379,7 +392,12 @@ async fn test_e2e_long_response_chunking() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -427,7 +445,12 @@ async fn test_e2e_llm_rate_limit_error() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -461,7 +484,12 @@ async fn test_e2e_llm_server_error() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -495,7 +523,12 @@ async fn test_e2e_llm_unauthorized() -> Result<()> {
             "invalid_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -529,7 +562,12 @@ async fn test_e2e_llm_invalid_json() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -582,7 +620,12 @@ async fn test_e2e_network_timeout() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url("http://invalid.local:99999".to_string()),
     );
@@ -628,7 +671,12 @@ async fn test_concurrent_requests() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -694,7 +742,12 @@ async fn test_performance_single_request() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -752,7 +805,12 @@ async fn test_e2e_empty_llm_response() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -795,7 +853,12 @@ async fn test_e2e_unicode_handling() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
@@ -846,7 +909,12 @@ async fn test_e2e_maximum_dns_response_size() -> Result<()> {
             "test_key".to_string(),
             vec!["test_model".to_string()],
             "Test system prompt".to_string(),
-            None, None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )?
         .with_base_url(server.url()),
     );
