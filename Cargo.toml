@@ -9,15 +9,15 @@ repository = "https://github.com/duyet/llm-over-dns"
 
 [dependencies]
 # DNS server
-hickory-dns = "0.25.2"
-hickory-server = "0.25.2"
+hickory-dns = "0.26.0"
+hickory-server = "0.26.0"
 hickory-proto = "0.26.0"
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
 
 # HTTP client for OpenRouter
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 
 # JSON handling
 serde = { version = "1.0", features = ["derive"] }
