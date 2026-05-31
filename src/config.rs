@@ -73,6 +73,12 @@ pub struct Config {
     pub frequency_penalty: Option<f32>,
     /// Presence penalty (0.0-2.0, encourages new topics)
     pub presence_penalty: Option<f32>,
+    /// Cache TTL in seconds (default: 300, set to 0 to disable)
+    pub cache_ttl_seconds: u64,
+    /// Rate limit requests per second per IP (default: 5.0, set to 0 to disable)
+    pub rate_limit_rps: f64,
+    /// Rate limit burst requests per IP (default: 10.0)
+    pub rate_limit_burst: f64,
 }
 
 impl Config {
@@ -198,6 +204,25 @@ impl Config {
             .ok()
             .and_then(|s| s.parse().ok());
 
+        // Load caching and rate limiting parameters
+        let cache_ttl_seconds = env::var("CACHE_TTL_SEC")
+            .or_else(|_| env::var("DNS_CACHE_TTL"))
+            .unwrap_or_else(|_| "300".to_string())
+            .parse()
+            .unwrap_or(300);
+
+        let rate_limit_rps = env::var("RATE_LIMIT_RPS")
+            .or_else(|_| env::var("DNS_RATE_LIMIT_RPS"))
+            .unwrap_or_else(|_| "5.0".to_string())
+            .parse()
+            .unwrap_or(5.0);
+
+        let rate_limit_burst = env::var("RATE_LIMIT_BURST")
+            .or_else(|_| env::var("DNS_RATE_LIMIT_BURST"))
+            .unwrap_or_else(|_| "10.0".to_string())
+            .parse()
+            .unwrap_or(10.0);
+
         Ok(Self {
             openrouter_api_key,
             openrouter_models,
@@ -211,6 +236,9 @@ impl Config {
             top_k,
             frequency_penalty,
             presence_penalty,
+            cache_ttl_seconds,
+            rate_limit_rps,
+            rate_limit_burst,
         })
     }
 }

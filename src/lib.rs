@@ -71,14 +71,18 @@
 //! - `custom_config.rs` - Custom configuration
 //! - `error_handling.rs` - Comprehensive error handling
 
+pub mod cache;
 pub mod chunker;
 pub mod config;
 pub mod dns_handler;
 pub mod llm_client;
+pub mod rate_limiter;
 pub mod server;
 
+pub use cache::DnsCache;
 pub use chunker::Chunker;
 pub use config::Config;
 pub use dns_handler::DnsHandler;
 pub use llm_client::LlmClient;
+pub use rate_limiter::IpRateLimiter;
 pub use server::{LlmDnsHandler, Server};

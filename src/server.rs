@@ -34,7 +34,8 @@ use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
-use crate::{Chunker, Config, DnsHandler, LlmClient};
+use crate::{Chunker, Config, DnsCache, DnsHandler, IpRateLimiter, LlmClient};
+use std::time::Duration;
 
 /// DNS query handler that integrates with LLM
 ///
@@ -47,6 +48,7 @@ pub struct LlmDnsHandler {
     llm_client: Arc<LlmClient>,
     chunker: Arc<Chunker>,
     dns_handler: Arc<DnsHandler>,
+    pub cache: Arc<DnsCache>,
 }
 
 impl LlmDnsHandler {
@@ -57,15 +59,18 @@ impl LlmDnsHandler {
     /// * `llm_client` - Client for LLM API interaction
     /// * `chunker` - Text chunking utility for DNS TXT record limits
     /// * `dns_handler` - DNS protocol handler
+    /// * `cache` - DNS response cache
     pub fn new(
         llm_client: Arc<LlmClient>,
         chunker: Arc<Chunker>,
         dns_handler: Arc<DnsHandler>,
+        cache: Arc<DnsCache>,
     ) -> Self {
         Self {
             llm_client,
             chunker,
             dns_handler,
+            cache,
         }
     }
 
@@ -89,6 +94,12 @@ impl LlmDnsHandler {
         // Extract the query domain from the DNS name
         let query_str = query_name.to_utf8();
         debug!("Raw query string: {}", query_str);
+
+        // Check cache first
+        if let Some(cached_records) = self.cache.get(&query_str).await {
+            info!("Cache hit for query '{}'", query_str);
+            return Ok(cached_records);
+        }
 
         // Parse subdomain to get the prompt
         let prompt = self.dns_handler.parse_subdomain(&query_str)?;
@@ -118,6 +129,9 @@ impl LlmDnsHandler {
             debug!("Created TXT record {}: {} bytes", index + 1, chunk.len());
         }
 
+        // Cache the records
+        self.cache.insert(&query_str, records.clone()).await;
+
         info!(
             "Successfully processed query '{}': {} chunks",
             prompt,
@@ -137,6 +151,7 @@ impl LlmDnsHandler {
 pub struct Server {
     config: Config,
     handler: Arc<LlmDnsHandler>,
+    rate_limiter: Arc<IpRateLimiter>,
     shutdown_tx: broadcast::Sender<()>,
 }
 
@@ -181,8 +196,17 @@ impl Server {
         // Initialize DNS handler
         let dns_handler = Arc::new(DnsHandler::new());
 
+        // Initialize cache
+        let cache = Arc::new(DnsCache::new(Duration::from_secs(config.cache_ttl_seconds)));
+
         // Create the main handler
-        let handler = Arc::new(LlmDnsHandler::new(llm_client, chunker, dns_handler));
+        let handler = Arc::new(LlmDnsHandler::new(llm_client, chunker, dns_handler, cache));
+
+        // Initialize rate limiter
+        let rate_limiter = Arc::new(IpRateLimiter::new(
+            config.rate_limit_rps,
+            config.rate_limit_burst,
+        ));
 
         // Create shutdown channel
         let (shutdown_tx, _) = broadcast::channel(1);
@@ -190,6 +214,7 @@ impl Server {
         Ok(Self {
             config,
             handler,
+            rate_limiter,
             shutdown_tx,
         })
     }
@@ -207,10 +232,15 @@ impl Server {
     #[cfg(test)]
     pub fn with_handler(config: Config, handler: Arc<LlmDnsHandler>) -> Self {
         let (shutdown_tx, _) = broadcast::channel(1);
+        let rate_limiter = Arc::new(IpRateLimiter::new(
+            config.rate_limit_rps,
+            config.rate_limit_burst,
+        ));
 
         Self {
             config,
             handler,
+            rate_limiter,
             shutdown_tx,
         }
     }
@@ -248,6 +278,26 @@ impl Server {
         info!("Waiting for DNS queries...");
         info!("Example: dig @localhost 'hello.world.llm.duyet.net' TXT");
 
+        // Spawn background cleanup task for cache and rate limiter
+        let cache_clone = self.handler.cache.clone();
+        let rate_limiter_clone = self.rate_limiter.clone();
+        let mut shutdown_rx_cleanup = self.shutdown_tx.subscribe();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx_cleanup.recv() => {
+                        break;
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => {
+                        debug!("Running background cleanup for cache and rate limiter...");
+                        cache_clone.cleanup().await;
+                        rate_limiter_clone.cleanup(Duration::from_secs(300));
+                    }
+                }
+            }
+        });
+
         // Wrap socket in Arc for sharing across tasks
         let socket = Arc::new(socket);
         let mut buffer = vec![0u8; 512];
@@ -274,6 +324,7 @@ impl Server {
                             match Message::from_vec(&buffer[..n]) {
                                 Ok(request_msg) => {
                                     let handler_clone = self.handler.clone();
+                                    let rate_limiter_clone = self.rate_limiter.clone();
                                     let socket_clone = socket.clone();
 
                                     // Process DNS query in background task
@@ -282,6 +333,7 @@ impl Server {
                                             request_msg,
                                             remote_addr,
                                             handler_clone,
+                                            rate_limiter_clone,
                                             socket_clone,
                                         )
                                         .await
@@ -356,8 +408,27 @@ async fn handle_dns_request(
     request_msg: Message,
     remote_addr: SocketAddr,
     handler: Arc<LlmDnsHandler>,
+    rate_limiter: Arc<IpRateLimiter>,
     socket: Arc<UdpSocket>,
 ) -> Result<()> {
+    // Check rate limit first
+    if !rate_limiter.check_allowed(remote_addr.ip()) {
+        warn!("Rate limit exceeded for client {}", remote_addr);
+        let mut response = Message::new(
+            request_msg.metadata.id,
+            MessageType::Response,
+            OpCode::Query,
+        );
+        response.metadata.recursion_available = false;
+        response.metadata.recursion_desired = request_msg.metadata.recursion_desired;
+        response.metadata.authoritative = true;
+        response.metadata.response_code = ResponseCode::Refused;
+
+        let response_bytes = response.to_vec()?;
+        socket.send_to(&response_bytes, remote_addr).await?;
+        return Ok(());
+    }
+
     // Create DNS response message
     let mut response = Message::new(
         request_msg.metadata.id,
@@ -446,6 +517,9 @@ mod tests {
             top_k: None,
             frequency_penalty: None,
             presence_penalty: None,
+            cache_ttl_seconds: 300,
+            rate_limit_rps: 5.0,
+            rate_limit_burst: 10.0,
         };
 
         let server = Server::new(config)?;
@@ -471,8 +545,9 @@ mod tests {
         );
         let chunker = Arc::new(Chunker::new());
         let dns_handler = Arc::new(DnsHandler::new());
+        let cache = Arc::new(DnsCache::new(Duration::from_secs(300)));
 
-        let handler = LlmDnsHandler::new(llm_client, chunker, dns_handler);
+        let handler = LlmDnsHandler::new(llm_client, chunker, dns_handler, cache);
 
         // Handler should be created successfully
         assert!(Arc::strong_count(&handler.llm_client) > 0);
