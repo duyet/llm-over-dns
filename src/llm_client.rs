@@ -981,4 +981,52 @@ mod tests {
         let result = client.query("Test prompt").await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    #[ignore] // Run with: cargo test test_anyrouter_smoke -- --ignored
+    async fn test_anyrouter_smoke() {
+        use std::env;
+        let api_key = match env::var("ANYROUTER_API_KEY") {
+            Ok(key) => key,
+            Err(_) => {
+                println!("Skipping AnyRouter smoke test (ANYROUTER_API_KEY not set)");
+                return;
+            }
+        };
+
+        // Ensure key starts with sk-ar-
+        assert!(
+            api_key.starts_with("sk-ar-"),
+            "ANYROUTER_API_KEY must start with 'sk-ar-'. Key was: {}",
+            api_key
+        );
+
+        let models = vec!["meta/llama-3.2-3b-instruct".to_string()];
+        let system_prompt = "You are a helpful assistant.".to_string();
+
+        let client = LlmClient::new(
+            api_key,
+            models,
+            system_prompt,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to create client")
+        .with_base_url("https://anyrouter.dev/api/v1/chat/completions".to_string());
+
+        println!("Sending smoke test query to AnyRouter...");
+        match client.query("Hello! Return exactly the word 'SUCCESS'").await {
+            Ok(reply) => {
+                println!("Received AnyRouter reply: {}", reply);
+                assert!(!reply.is_empty(), "Reply cannot be empty");
+            }
+            Err(e) => {
+                panic!("AnyRouter query failed: {:?}", e);
+            }
+        }
+    }
 }

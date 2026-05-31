@@ -39,7 +39,12 @@ async fn main() -> Result<()> {
 
     // Display configuration with masked API key
     info!("=== Configuration ===");
-    info!("Provider: OpenRouter API (https://openrouter.ai)");
+    let provider_name = if config.llm_base_url.contains("anyrouter.dev") {
+        "AnyRouter API (https://anyrouter.dev)"
+    } else {
+        "OpenRouter API (https://openrouter.ai)"
+    };
+    info!("Provider: {}", provider_name);
     info!(
         "API Key: {}...*** (masked)",
         mask_api_key(&config.openrouter_api_key)

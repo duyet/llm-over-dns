@@ -71,20 +71,39 @@ cargo run
 
 ### 4. Default Values (Fallback)
 If not specified, the following defaults are used:
-- `OPENROUTER_MODEL`: `nvidia/nemotron-nano-12b-v2-vl:free`
+- `OPENROUTER_MODEL`: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`
+- `ANYROUTER_MODEL`: `meta/llama-3.2-3b-instruct`
 - `DNS_PORT`: `53`
 - `DNS_ADDRESS`: `0.0.0.0`
 - `RUST_LOG`: `info`
 
-**Note**: `OPENROUTER_API_KEY` is **required** and has no default.
+**Note**: Either `OPENROUTER_API_KEY` or `ANYROUTER_API_KEY` is **required**.
 
 ---
 
 ## Configuration Options
 
-### OpenRouter API Configuration
+### LLM Provider API Configuration
 
-#### `OPENROUTER_API_KEY` (Required)
+The server supports two LLM API providers: **OpenRouter** and **AnyRouter**. You can use either, or both (with `ANYROUTER_API_KEY` taking precedence).
+
+#### `ANYROUTER_API_KEY` (Required if using AnyRouter)
+Your AnyRouter API key for authentication. If this environment variable is set, the server automatically repoints LLM calls to AnyRouter.
+
+**Format**: `sk-ar-v1-...`
+
+**How to get**:
+1. Sign up at [anyrouter.dev](https://anyrouter.dev/)
+2. Navigate to [Keys](/dashboard/keys)
+3. Create a new API key
+4. Copy and paste into `.env`
+
+**Example**:
+```env
+ANYROUTER_API_KEY=sk-ar-v1-1234567890abcdef
+```
+
+#### `OPENROUTER_API_KEY` (Required if using OpenRouter)
 Your OpenRouter API key for authentication.
 
 **Format**: `sk-or-v1-...`
@@ -105,19 +124,24 @@ OPENROUTER_API_KEY=sk-or-v1-1234567890abcdef
 - ⚠️ Never share your API key publicly
 - ⚠️ Rotate keys if exposed
 
-#### `OPENROUTER_MODEL` (Optional)
-The LLM model to use for generating responses.
+#### `ANYROUTER_MODEL` (Optional)
+The LLM model to use for generating responses when using AnyRouter.
 
-**Default**: `nvidia/nemotron-nano-12b-v2-vl:free`
-
-**Popular free models**:
-- `nvidia/nemotron-nano-12b-v2-vl:free` - Fast, good quality (recommended)
-- `minimax/minimax-m2:free` - Alternative free model
-- `meta-llama/llama-3.2-3b-instruct:free` - Smaller, faster
+**Default**: `meta/llama-3.2-3b-instruct`
 
 **Example**:
 ```env
-OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free
+ANYROUTER_MODEL=meta/llama-3.2-3b-instruct
+```
+
+#### `OPENROUTER_MODEL` (Optional)
+The LLM model to use for generating responses when using OpenRouter.
+
+**Default**: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`
+
+**Example**:
+```env
+OPENROUTER_MODEL=nvidia/nemotron-nano-9b-v2:free
 ```
 
 **Browse models**: [openrouter.ai/models](https://openrouter.ai/models?order=newest&supported_parameters=tools&max_price=0)

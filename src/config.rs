@@ -53,6 +53,8 @@ pub struct Config {
     pub openrouter_api_key: String,
     /// List of model identifiers for LLM inference with automatic fallback
     pub openrouter_models: Vec<String>,
+    /// Base URL for the LLM API
+    pub llm_base_url: String,
     /// System prompt to guide LLM responses
     pub system_prompt: String,
     /// DNS server listening port
@@ -126,14 +128,34 @@ impl Config {
             dotenvy::dotenv().ok();
         }
 
-        let openrouter_api_key = env::var("OPENROUTER_API_KEY")
-            .context("OPENROUTER_API_KEY environment variable not set")?;
+        // Support ANYROUTER_API_KEY with fallback to OPENROUTER_API_KEY
+        let (openrouter_api_key, is_anyrouter) = if let Ok(key) = env::var("ANYROUTER_API_KEY") {
+            (key, true)
+        } else {
+            let key = env::var("OPENROUTER_API_KEY")
+                .context("Neither ANYROUTER_API_KEY nor OPENROUTER_API_KEY environment variable is set")?;
+            let is_ar = key.starts_with("sk-ar-");
+            (key, is_ar)
+        };
 
-        // Default to fastest free models if not configured
-        let default_models = "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free";
+        // Determine base URL based on provider
+        let llm_base_url = if is_anyrouter {
+            "https://anyrouter.dev/api/v1/chat/completions".to_string()
+        } else {
+            "https://openrouter.ai/api/v1/chat/completions".to_string()
+        };
 
-        let openrouter_model_str =
-            env::var("OPENROUTER_MODEL").unwrap_or_else(|_| default_models.to_string());
+        // Default models
+        let default_models = if is_anyrouter {
+            "meta/llama-3.2-3b-instruct"
+        } else {
+            "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free"
+        };
+
+        // Load models from environment variables
+        let openrouter_model_str = env::var("ANYROUTER_MODEL")
+            .or_else(|_| env::var("OPENROUTER_MODEL"))
+            .unwrap_or_else(|_| default_models.to_string());
 
         // Parse comma-separated models, trim whitespace, and filter out empty strings
         let openrouter_models: Vec<String> = openrouter_model_str
@@ -143,7 +165,7 @@ impl Config {
             .collect();
 
         if openrouter_models.is_empty() {
-            return Err(anyhow::anyhow!("OPENROUTER_MODEL list cannot be empty"));
+            return Err(anyhow::anyhow!("Model list cannot be empty"));
         }
 
         // Load system prompt with sensible default
@@ -178,6 +200,7 @@ impl Config {
         Ok(Self {
             openrouter_api_key,
             openrouter_models,
+            llm_base_url,
             system_prompt,
             dns_port,
             dns_address,
@@ -417,5 +440,20 @@ mod tests {
         env::remove_var("TOP_K");
         env::remove_var("FREQUENCY_PENALTY");
         env::remove_var("PRESENCE_PENALTY");
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_anyrouter() {
+        env::set_var("ANYROUTER_API_KEY", "sk-ar-v1-testkey");
+        env::set_var("ANYROUTER_MODEL", "meta/llama-3.2-3b-instruct");
+
+        let config = Config::from_env().expect("Failed to load AnyRouter config");
+        assert_eq!(config.openrouter_api_key, "sk-ar-v1-testkey");
+        assert_eq!(config.openrouter_models, vec!["meta/llama-3.2-3b-instruct".to_string()]);
+        assert_eq!(config.llm_base_url, "https://anyrouter.dev/api/v1/chat/completions");
+
+        env::remove_var("ANYROUTER_API_KEY");
+        env::remove_var("ANYROUTER_MODEL");
     }
 }

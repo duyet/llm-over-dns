@@ -147,11 +147,14 @@ dig @localhost 'explain data exfiltration via DNS' TXT
 Create `.env` or `.env.local` (higher priority):
 
 ```bash
-# Required
-OPENROUTER_API_KEY=your_key_here  # Get free key: https://openrouter.io
+# Required (at least one)
+OPENROUTER_API_KEY=your_key_here  # Get key: https://openrouter.io
+# OR
+ANYROUTER_API_KEY=your_key_here   # Get key: https://anyrouter.dev (starts with sk-ar-)
 
 # Optional
-OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free  # Comma-separated for fallback
+OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free  # Comma-separated for OpenRouter fallback
+ANYROUTER_MODEL=meta/llama-3.2-3b-instruct            # Comma-separated for AnyRouter fallback
 DNS_PORT=5353                      # Default: 53 (requires sudo), use 5353 for dev
 DNS_ADDRESS=0.0.0.0                # Default: 0.0.0.0 (all interfaces)
 RUST_LOG=info                      # debug | info | warn | error

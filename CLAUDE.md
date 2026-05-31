@@ -119,11 +119,13 @@ The application uses the following priority order:
 3. **`.env`** (for team-shared config)
 4. **Defaults** (lowest priority)
 
-Required:
+Required (at least one):
 - `OPENROUTER_API_KEY` - Your OpenRouter API key (get free key at openrouter.io)
+- `ANYROUTER_API_KEY` - Your AnyRouter API key (switches to AnyRouter provider; starts with `sk-ar-`)
 
 Optional:
-- `OPENROUTER_MODEL` - Comma-separated list of models for automatic fallback (default: `nvidia/nemotron-nano-12b-v2-vl:free`)
+- `OPENROUTER_MODEL` - Comma-separated list of models for automatic fallback (default: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`)
+- `ANYROUTER_MODEL` - Comma-separated list of models for AnyRouter fallback (default: `meta/llama-3.2-3b-instruct`)
 - `DNS_PORT` or `PORT` - DNS listening port (default: 53, `PORT` takes precedence)
 - `DNS_ADDRESS` or `HOST` - Bind address (default: 0.0.0.0, `HOST` takes precedence)
 - `RUST_LOG` - Logging level: debug, info, warn, error (default: info)

@@ -158,20 +158,22 @@ impl Server {
     /// - Configuration is invalid
     pub fn new(config: Config) -> Result<Self> {
         // Initialize LLM client
-        let llm_client = Arc::new(
-            LlmClient::new(
-                config.openrouter_api_key.clone(),
-                config.openrouter_models.clone(),
-                config.system_prompt.clone(),
-                config.temperature,
-                config.max_tokens,
-                config.top_p,
-                config.top_k,
-                config.frequency_penalty,
-                config.presence_penalty,
-            )
-            .context("Failed to create LLM client")?,
-        );
+        let mut llm_client = LlmClient::new(
+            config.openrouter_api_key.clone(),
+            config.openrouter_models.clone(),
+            config.system_prompt.clone(),
+            config.temperature,
+            config.max_tokens,
+            config.top_p,
+            config.top_k,
+            config.frequency_penalty,
+            config.presence_penalty,
+        )
+        .context("Failed to create LLM client")?;
+
+        // Repoint client base URL from config
+        llm_client = llm_client.with_base_url(config.llm_base_url.clone());
+        let llm_client = Arc::new(llm_client);
 
         // Initialize chunker
         let chunker = Arc::new(Chunker::new());
@@ -434,6 +436,7 @@ mod tests {
         let config = Config {
             openrouter_api_key: "test_key".to_string(),
             openrouter_models: vec!["test_model".to_string()],
+            llm_base_url: "https://openrouter.ai/api/v1/chat/completions".to_string(),
             system_prompt: "Test system prompt".to_string(),
             dns_address: "127.0.0.1".to_string(),
             dns_port: 15353,
