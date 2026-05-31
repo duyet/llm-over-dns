@@ -341,9 +341,9 @@ Key debug points:
 
 Key dependencies (see `Cargo.toml` for full list):
 
-- `hickory-dns` (v0.25.2) - DNS protocol implementation
+- `hickory-dns` (v0.26.0) - DNS protocol implementation
 - `tokio` (v1.35) - Async runtime
-- `reqwest` (v0.11) - HTTP client for OpenRouter API
+- `reqwest` (v0.13) - HTTP client for OpenRouter API
 - `serde`/`serde_json` (v1.0) - JSON serialization
 - `anyhow`/`thiserror` (v1.0) - Error handling
 - `tracing` (v0.1) - Structured logging
