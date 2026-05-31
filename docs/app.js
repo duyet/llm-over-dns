@@ -261,12 +261,12 @@ USES.forEach((u) => {
 
 /* ============ Docs links ============ */
 const DOCS = [
-  { h: "Getting started", d: "Detailed setup, prerequisites, and your first query.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/GETTING_STARTED.md", i: "rocket" },
-  { h: "Architecture", d: "System design, async internals, and request lifecycle.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/ARCHITECTURE.md", i: "diagram" },
+  { h: "Getting started", d: "Detailed setup, prerequisites, and your first query.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/getting_started.md", i: "rocket" },
+  { h: "Architecture", d: "System design, async internals, and request lifecycle.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/architecture.md", i: "diagram" },
   { h: "Configuration", d: "Environment variables, providers, and priority order.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/configuration.md", i: "gear" },
   { h: "Docker deployment", d: "Compose, multi-arch images, and production setup.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/deployment-docker.md", i: "box" },
-  { h: "Rust API", d: "Generated API reference for the crate internals.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/API.md", i: "code" },
-  { h: "Contributing", d: "Dev workflow, tests, lint, and PR guidelines.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/CONTRIBUTING.md", i: "heart" }
+  { h: "Rust API", d: "Generated API reference for the crate internals.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/api.md", i: "code" },
+  { h: "Contributing", d: "Dev workflow, tests, lint, and PR guidelines.", u: "https://github.com/duyet/llm-over-dns/blob/master/docs/contributing.md", i: "heart" }
 ];
 const DOC_ICONS = {
   rocket: '<path d="M5 13c-1.5 1.5-2 5-2 5s3.5-.5 5-2M9 11a8 8 0 0 1 9-8 8 8 0 0 1-8 9zM12 8a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0z"/>',

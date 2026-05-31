@@ -114,7 +114,7 @@ graph TD
 - Graceful shutdown with signal handling
 - Structured logging with `tracing`
 
-For detailed architecture, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For detailed architecture, see [architecture.md](docs/architecture.md).
 
 ---
 
@@ -384,12 +384,12 @@ All checks must pass before merge. See [.github/workflows/](.github/workflows/) 
 
 Comprehensive guides in the `docs/` directory:
 
-- **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Detailed setup guide
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design and internals
+- **[getting_started.md](docs/getting_started.md)** - Detailed setup guide
+- **[architecture.md](docs/architecture.md)** - System design and internals
 - **[configuration.md](docs/configuration.md)** - Environment and config options
 - **[deployment-docker.md](docs/deployment-docker.md)** - Docker and production deployment
-- **[API.md](docs/API.md)** - Rust API documentation
-- **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Development guidelines
+- **[api.md](docs/api.md)** - Rust API documentation
+- **[contributing.md](docs/contributing.md)** - Development guidelines
 - **[CLAUDE.md](CLAUDE.md)** - Instructions for Claude Code (meta!)
 
 Generate Rust API docs: `cargo doc --open`
@@ -407,7 +407,7 @@ Contributions welcome! Built by AI, improved by humans. 😊
 5. Format: `cargo fmt`
 6. Submit PR
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+See [contributing.md](docs/contributing.md) for guidelines.
 
 ### Development Workflow
 

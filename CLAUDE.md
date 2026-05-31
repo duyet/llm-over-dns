@@ -264,11 +264,11 @@ All CI checks must pass before merge. Coverage threshold is 90%.
 
 Complete documentation is in the `docs/` directory:
 
-- **[Getting Started](docs/GETTING_STARTED.md)** - Quick start guide
+- **[Getting Started](docs/getting_started.md)** - Quick start guide
 - **[Configuration](docs/configuration.md)** - Environment setup
-- **[Architecture](docs/ARCHITECTURE.md)** - System design details
-- **[API Reference](docs/API.md)** - Rust API documentation
-- **[Contributing](docs/CONTRIBUTING.md)** - Development guidelines
+- **[Architecture](docs/architecture.md)** - System design details
+- **[API Reference](docs/api.md)** - Rust API documentation
+- **[Contributing](docs/contributing.md)** - Development guidelines
 - **[Deployment](docs/deployment-docker.md)** - Docker and production deployment
 
 Generate API docs: `cargo doc --open`

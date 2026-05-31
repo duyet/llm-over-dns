@@ -110,5 +110,5 @@ LLM gateway requests can take a few seconds to complete. Standard `dig` utility 
 ## 📚 Next Steps
 
 * **[Configuration Guide](configuration.md)** - Learn about fallback models, bind address custom configurations, and logging levels.
-* **[System Architecture](ARCHITECTURE.md)** - Understand the internal design and how the stateless DNS handler operates.
+* **[System Architecture](architecture.md)** - Understand the internal design and how the stateless DNS handler operates.
 * **[Docker Deployment Guide](deployment-docker.md)** - Step-by-step instructions for deploying to a VPS using Docker and Docker Compose.
