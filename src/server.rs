@@ -357,20 +357,21 @@ async fn handle_dns_request(
     socket: Arc<UdpSocket>,
 ) -> Result<()> {
     // Create DNS response message
-    let mut response = Message::new();
-    response.set_id(request_msg.id());
-    response.set_message_type(MessageType::Response);
-    response.set_op_code(OpCode::Query);
-    response.set_recursion_available(false);
-    response.set_recursion_desired(request_msg.recursion_desired());
+    let mut response = Message::new(
+        request_msg.metadata.id,
+        MessageType::Response,
+        OpCode::Query,
+    );
+    response.metadata.recursion_available = false;
+    response.metadata.recursion_desired = request_msg.metadata.recursion_desired;
 
     // Set authoritative answer bit
-    response.set_authoritative(true);
+    response.metadata.authoritative = true;
 
     // Process each query in the request
     let mut response_code = ResponseCode::NoError;
 
-    for query in request_msg.queries() {
+    for query in &request_msg.queries {
         debug!(
             "Processing query: {} {:?}",
             query.name(),
@@ -404,7 +405,7 @@ async fn handle_dns_request(
     }
 
     // Set response code
-    response.set_response_code(response_code);
+    response.metadata.response_code = response_code;
 
     // Serialize DNS response to bytes
     let response_bytes = response.to_vec()?;
