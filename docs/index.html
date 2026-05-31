@@ -445,6 +445,28 @@
       <div class="feat-grid" id="featGrid"></div>
     </div>
   </section>
+  <!-- LIVE DEMO -->
+  <section id="live" style="background:var(--bg-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+    <div class="wrap">
+      <div class="sec-tag" style="color:var(--accent)">Live Demo</div>
+      <h2 class="sec-title">Try it live now. No setup needed.</h2>
+      <p class="sec-lead">A live Nameserver is running publicly at <code>178.18.253.241</code> mapped to <strong><code>llm-over-dns.duyet.net</code></strong>. Run these queries directly from your own terminal.</p>
+      
+      <div class="feat-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap: 24px;margin-top: 32px;">
+        <div class="feat" style="background:var(--bg-1);border:1px solid var(--line);padding:24px;border-radius:12px;">
+          <h3 style="margin-bottom:12px;">Option A: Query Server Directly</h3>
+          <p style="margin-bottom:16px;">Query the live DNS server directly by pointing to its domain:</p>
+          <pre style="background:var(--bg-2);padding:14px;border-radius:8px;font-family:var(--mono);font-size:0.9em;color:var(--text-1);overflow-x:auto;border:1px solid var(--line);">dig +short TXT "What is 15 + 30?" &#64;llm-over-dns.duyet.net</pre>
+        </div>
+        
+        <div class="feat" style="background:var(--bg-1);border:1px solid var(--line);padding:24px;border-radius:12px;">
+          <h3 style="margin-bottom:12px;">Option B: NS Delegation (Magical)</h3>
+          <p style="margin-bottom:16px;">Query from any machine globally without specifying the server address:</p>
+          <pre style="background:var(--bg-2);padding:14px;border-radius:8px;font-family:var(--mono);font-size:0.9em;color:var(--text-1);overflow-x:auto;border:1px solid var(--line);">dig +short TXT "hello.llm-over-dns.duyet.net"</pre>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- QUICK START -->
   <section id="start">

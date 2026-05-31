@@ -21,6 +21,23 @@ dig @localhost -p 5353 'explain quantum computing in simple terms' TXT +short
 # "Quantum computing uses quantum mechanics to process information. Unlike classical..."
 ```
 
+## 🌐 Live Demo
+
+You can test this project live right now from your own terminal without installing anything! We have a publicly deployed server at `178.18.253.241` mapped to **`llm-over-dns.duyet.net`**.
+
+### Option A: Query the Live Server Directly (Standard)
+```bash
+dig +short TXT "What is 15 + 30?" @llm-over-dns.duyet.net
+# "15 + 30 = 45"
+```
+
+### Option B: Query via Global NS Delegation (Magical!)
+Because the subdomain is delegated globally via `NS` records, you can query the LLM from **any computer on earth** directly through standard internet DNS, without specifying the `@` target server:
+```bash
+dig +short TXT "hello.llm-over-dns.duyet.net"
+# "Hello! How can I help you today?"
+```
+
 ### ✨ Key Features
 
 - **🌐 Universal Protocol** - DNS works everywhere, on every device
