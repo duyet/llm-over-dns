@@ -983,8 +983,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Run with: cargo test test_anyrouter_smoke -- --ignored
     async fn test_anyrouter_smoke() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("debug")
+            .try_init();
         use std::env;
         let api_key = match env::var("ANYROUTER_API_KEY") {
             Ok(key) => key,
@@ -1001,7 +1003,11 @@ mod tests {
             api_key
         );
 
-        let models = vec!["meta/llama-3.2-3b-instruct".to_string()];
+        let models = vec![
+            "google/gemini-2.5-flash-lite".to_string(),
+            "openai/gpt-4o-mini".to_string(),
+            "meta/llama-3.2-3b-instruct".to_string(),
+        ];
         let system_prompt = "You are a helpful assistant.".to_string();
 
         let client = LlmClient::new(
@@ -1019,7 +1025,10 @@ mod tests {
         .with_base_url("https://anyrouter.dev/api/v1/chat/completions".to_string());
 
         println!("Sending smoke test query to AnyRouter...");
-        match client.query("Hello! Return exactly the word 'SUCCESS'").await {
+        match client
+            .query("Hello! Return exactly the word 'SUCCESS'")
+            .await
+        {
             Ok(reply) => {
                 println!("Received AnyRouter reply: {}", reply);
                 assert!(!reply.is_empty(), "Reply cannot be empty");

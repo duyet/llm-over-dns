@@ -86,9 +86,12 @@ jobs:
         run: cargo test --all-features --verbose
         env:
           RUST_BACKTRACE: full
+          ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
 
       - name: Run doc tests
         run: cargo test --doc --all-features
+        env:
+          ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
 
   # Code coverage
   coverage:
@@ -108,6 +111,8 @@ jobs:
 
       - name: Generate coverage
         run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 60
+        env:
+          ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6

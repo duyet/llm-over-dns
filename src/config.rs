@@ -132,8 +132,9 @@ impl Config {
         let (openrouter_api_key, is_anyrouter) = if let Ok(key) = env::var("ANYROUTER_API_KEY") {
             (key, true)
         } else {
-            let key = env::var("OPENROUTER_API_KEY")
-                .context("Neither ANYROUTER_API_KEY nor OPENROUTER_API_KEY environment variable is set")?;
+            let key = env::var("OPENROUTER_API_KEY").context(
+                "Neither ANYROUTER_API_KEY nor OPENROUTER_API_KEY environment variable is set",
+            )?;
             let is_ar = key.starts_with("sk-ar-");
             (key, is_ar)
         };
@@ -147,7 +148,7 @@ impl Config {
 
         // Default models
         let default_models = if is_anyrouter {
-            "meta/llama-3.2-3b-instruct"
+            "google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct"
         } else {
             "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free"
         };
@@ -450,8 +451,14 @@ mod tests {
 
         let config = Config::from_env().expect("Failed to load AnyRouter config");
         assert_eq!(config.openrouter_api_key, "sk-ar-v1-testkey");
-        assert_eq!(config.openrouter_models, vec!["meta/llama-3.2-3b-instruct".to_string()]);
-        assert_eq!(config.llm_base_url, "https://anyrouter.dev/api/v1/chat/completions");
+        assert_eq!(
+            config.openrouter_models,
+            vec!["meta/llama-3.2-3b-instruct".to_string()]
+        );
+        assert_eq!(
+            config.llm_base_url,
+            "https://anyrouter.dev/api/v1/chat/completions"
+        );
 
         env::remove_var("ANYROUTER_API_KEY");
         env::remove_var("ANYROUTER_MODEL");
