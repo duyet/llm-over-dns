@@ -437,6 +437,7 @@ async fn handle_dns_request(
     );
     response.metadata.recursion_available = false;
     response.metadata.recursion_desired = request_msg.metadata.recursion_desired;
+    response.add_queries(request_msg.queries.clone());
 
     // Set authoritative answer bit
     response.metadata.authoritative = true;
