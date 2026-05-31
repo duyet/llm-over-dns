@@ -254,18 +254,32 @@ Answer:
 - DNS response caching (not ideal for dynamic content)
 - DNS resolution timeouts
 
-### 2. OpenRouter API
+### 2. LLM Gateways (AnyRouter & OpenRouter)
 
-**Why OpenRouter?**
-- Free tier with no usage limits
-- Multiple models available
-- OpenAI-compatible API
-- Handles authentication centrally
+The server supports two LLM API gateway providers, giving you flexible choices for model inference:
+
+#### AnyRouter (Recommended)
+**Why AnyRouter?**
+- Highly optimized, extremely fast, and low latency
+- Native compatibility with both OpenAI and Anthropic format/SDK specifications
+- Seamless failover across top open and commercial models
+- Get key at [anyrouter.dev](https://anyrouter.dev)
 
 **Models**:
-- `nvidia/nemotron-nano-12b-v2-vl:free` - Fast, lightweight (recommended)
-- `meta-llama/llama-2-7b-chat:free` - Balanced
-- Others available at openrouter.io
+- `google/gemini-2.5-flash-lite` - Extremely fast and accurate for systems programming & facts (default)
+- `meta/llama-3.2-3b-instruct` - Lightweight and reliable fallback model (default fallback)
+
+#### OpenRouter
+**Why OpenRouter?**
+- Excellent free tier with no strict usage limits
+- Hundreds of open-source and proprietary models available
+- OpenAI-compatible API
+- Get key at [openrouter.ai](https://openrouter.ai)
+
+**Models**:
+- `nvidia/nemotron-nano-9b-v2:free` - Fast, lightweight default (recommended)
+- `meituan/longcat-flash-chat:free` - Good for chat
+- `minimax/minimax-m2:free` - Alternative fallback
 
 ### 3. Async/Await with Tokio
 

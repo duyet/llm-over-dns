@@ -8,7 +8,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#-for-developers)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://ghcr.io/duyet/llm-over-dns)
 
-A high-performance DNS server that responds to TXT queries with AI-generated answers via OpenRouter. Ask AI anything using standard DNS tools—no special clients required.
+A high-performance DNS server that responds to TXT queries with AI-generated answers via **AnyRouter (Recommended)** or **OpenRouter**. Ask AI anything using standard DNS tools—no special clients required.
 
 ---
 
@@ -27,7 +27,7 @@ dig @localhost -p 5353 'explain quantum computing in simple terms' TXT +short
 - **🔓 Firewall-Friendly** - DNS (port 53/5353) rarely blocked, even in restricted networks
 - **⚡ High Performance** - Async Rust architecture, production-ready
 - **🔄 Auto Fallback** - Multiple AI models with automatic failover
-- **🆓 Free Tier** - Powered by OpenRouter's free models
+- **🆓 Flexible Providers** - Powered by **AnyRouter (Recommended)** or OpenRouter's API models
 - **🐳 Docker Ready** - Multi-arch images (amd64, arm64)
 - **✅ 100% Test Coverage** - Comprehensive test suite with CI/CD
 - **📦 Cross-Platform** - Binaries for Linux, macOS, Windows
@@ -85,7 +85,7 @@ dig @localhost -p 5454 'what is rust programming in one sentence' TXT +time=30 +
 
 **Expected Response Output:**
 ```text
-"Rust is a systems programming language focused on safety, speed, and concurrency, designed to prevent common programming errors like null pointer dereferences and data races."
+"Rust is a systems programming language focused on safety, speed, and concurrency, designed to prevent memory errors and data races at compile time."
 ```
 
 ---
@@ -103,7 +103,7 @@ graph TD
 ```
 
 1. **DNS Query**: You send a question as a DNS TXT query
-2. **LLM Processing**: Query sent directly to LLM via OpenRouter (no domain parsing)
+2. **LLM Processing**: Query sent directly to LLM via **AnyRouter** or OpenRouter (no domain parsing)
 3. **Response Chunking**: Long responses split into 255-char TXT records (DNS limit)
 4. **Model Fallback**: Automatic failover to backup models if primary fails
 
@@ -163,13 +163,13 @@ Create `.env` or `.env.local` (higher priority):
 
 ```bash
 # Required (at least one)
-OPENROUTER_API_KEY=your_key_here  # Get key: https://openrouter.io
+ANYROUTER_API_KEY=your_key_here   # (Recommended) Get key: https://anyrouter.dev (starts with sk-ar-)
 # OR
-ANYROUTER_API_KEY=your_key_here   # Get key: https://anyrouter.dev (starts with sk-ar-)
+OPENROUTER_API_KEY=your_key_here  # Get key: https://openrouter.ai
 
 # Optional
-OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free  # Comma-separated for OpenRouter fallback
-ANYROUTER_MODEL=meta/llama-3.2-3b-instruct            # Comma-separated for AnyRouter fallback
+ANYROUTER_MODEL=google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct  # Comma-separated for AnyRouter fallback
+OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free                    # Comma-separated for OpenRouter fallback
 DNS_PORT=5353                      # Default: 53 (requires sudo), use 5353 for dev
 DNS_ADDRESS=0.0.0.0                # Default: 0.0.0.0 (all interfaces)
 RUST_LOG=info                      # debug | info | warn | error
@@ -282,7 +282,7 @@ dig +timeout=10 @localhost -p 5353 'explain quantum physics' TXT +short
 ### Prerequisites
 
 - Rust 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-- OpenRouter API key (free at [openrouter.io](https://openrouter.io))
+- AnyRouter API key (Recommended, get key at [anyrouter.dev](https://anyrouter.dev)) or OpenRouter API key (free at [openrouter.ai](https://openrouter.ai))
 
 ### Build & Test
 
@@ -440,7 +440,8 @@ Free to use, modify, and distribute.
 - **GitHub**: [github.com/duyet/llm-over-dns](https://github.com/duyet/llm-over-dns)
 - **Docker Images**: [ghcr.io/duyet/llm-over-dns](https://ghcr.io/duyet/llm-over-dns)
 - **Author**: [duyet.net](https://duyet.net)
-- **OpenRouter**: [openrouter.io](https://openrouter.io)
+- **AnyRouter**: [anyrouter.dev](https://anyrouter.dev) (Recommended)
+- **OpenRouter**: [openrouter.ai](https://openrouter.ai)
 
 ---
 

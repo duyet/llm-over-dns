@@ -24,7 +24,7 @@ This project adheres to the Rust Community Code of Conduct. By participating, yo
 
 - Rust 1.70 or later (install from [rustup.rs](https://rustup.rs/))
 - Git
-- An OpenRouter API key (free at [openrouter.io](https://openrouter.io))
+- An AnyRouter API key (Recommended, get key at [anyrouter.dev](https://anyrouter.dev)) or OpenRouter API key (free at [openrouter.ai](https://openrouter.ai))
 
 ### Fork and Clone
 

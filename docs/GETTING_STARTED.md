@@ -58,7 +58,7 @@ Read:
 git clone https://github.com/duyet/llm-over-dns.git
 cd llm-over-dns
 cp .env.example .env
-# Edit .env with your OpenRouter API key
+# Edit .env with your AnyRouter (Recommended) or OpenRouter API key
 cargo build --release
 sudo ./target/release/llm-over-dns
 ```
@@ -75,7 +75,7 @@ dig @localhost hello.example.com TXT +short
 ```bash
 docker build -t llm-over-dns .
 docker run -p 53:53/udp \
-  -e OPENROUTER_API_KEY=your_key \
+  -e ANYROUTER_API_KEY=your_key \
   llm-over-dns
 ```
 
@@ -149,8 +149,8 @@ llm-over-dns/
 
 ## Frequently Asked Questions
 
-**Q: How do I set up OpenRouter API?**
-A: Create free account at openrouter.io, get API key, add to .env file.
+**Q: How do I set up AnyRouter or OpenRouter API?**
+A: Create an account at [anyrouter.dev](https://anyrouter.dev) (Recommended) or [openrouter.ai](https://openrouter.ai), get an API key, and add it to your `.env` file.
 
 **Q: Can I run without sudo?**
 A: Yes! Use `DNS_PORT=5353` to use non-privileged port.
@@ -183,8 +183,8 @@ TXT "Response part 2 (≤255 chars)"
 ### Configuration
 Set environment variables or create .env file:
 ```
-OPENROUTER_API_KEY=your_key
-OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free
+ANYROUTER_API_KEY=your_key
+ANYROUTER_MODEL=google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct
 DNS_PORT=53
 DNS_ADDRESS=0.0.0.0
 ```

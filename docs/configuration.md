@@ -14,9 +14,12 @@ This guide explains how to configure the LLM over DNS server using environment v
    nano .env  # or your preferred editor
    ```
 
-3. **Add your OpenRouter API key**:
+3. **Add your API key (AnyRouter is highly recommended)**:
    ```env
-   OPENROUTER_API_KEY=sk-or-v1-your-actual-api-key-here
+   # Recommended: AnyRouter
+   ANYROUTER_API_KEY=sk-ar-v1-your-actual-api-key-here
+   # Or OpenRouter:
+   # OPENROUTER_API_KEY=sk-or-v1-your-actual-api-key-here
    ```
 
 4. **Run the server**:
@@ -34,8 +37,8 @@ The server supports four ways to provide configuration (in order of precedence):
 
 ### 1. Environment Variables (Highest Priority)
 ```bash
-export OPENROUTER_API_KEY="sk-or-v1-..."
-export OPENROUTER_MODEL="nvidia/nemotron-nano-12b-v2-vl:free"
+export ANYROUTER_API_KEY="sk-ar-v1-..."
+export ANYROUTER_MODEL="google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct"
 export DNS_PORT=53
 export DNS_ADDRESS=0.0.0.0
 
@@ -47,7 +50,7 @@ cargo run
 # Create .env.local for local-only overrides
 # This file is gitignored and takes precedence over .env
 cat > .env.local << EOF
-OPENROUTER_API_KEY=my-local-dev-key
+ANYROUTER_API_KEY=my-local-dev-key
 DNS_PORT=5353
 RUST_LOG=debug
 EOF
@@ -72,12 +75,13 @@ cargo run
 ### 4. Default Values (Fallback)
 If not specified, the following defaults are used:
 - `OPENROUTER_MODEL`: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`
-- `ANYROUTER_MODEL`: `meta/llama-3.2-3b-instruct`
+- `ANYROUTER_MODEL`: `google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct`
+- `OPENROUTER_MODEL`: `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free`
 - `DNS_PORT`: `53`
 - `DNS_ADDRESS`: `0.0.0.0`
 - `RUST_LOG`: `info`
 
-**Note**: Either `OPENROUTER_API_KEY` or `ANYROUTER_API_KEY` is **required**.
+**Note**: Either `ANYROUTER_API_KEY` or `OPENROUTER_API_KEY` is **required**.
 
 ---
 
@@ -85,7 +89,7 @@ If not specified, the following defaults are used:
 
 ### LLM Provider API Configuration
 
-The server supports two LLM API providers: **OpenRouter** and **AnyRouter**. You can use either, or both (with `ANYROUTER_API_KEY` taking precedence).
+The server supports two LLM API providers: **AnyRouter (Recommended)** and **OpenRouter**. You can use either, or both (with `ANYROUTER_API_KEY` taking precedence as the highly optimized, fast gateway option).
 
 #### `ANYROUTER_API_KEY` (Required if using AnyRouter)
 Your AnyRouter API key for authentication. If this environment variable is set, the server automatically repoints LLM calls to AnyRouter.
@@ -127,11 +131,11 @@ OPENROUTER_API_KEY=sk-or-v1-1234567890abcdef
 #### `ANYROUTER_MODEL` (Optional)
 The LLM model to use for generating responses when using AnyRouter.
 
-**Default**: `meta/llama-3.2-3b-instruct`
+**Default**: `google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct`
 
 **Example**:
 ```env
-ANYROUTER_MODEL=meta/llama-3.2-3b-instruct
+ANYROUTER_MODEL=google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct
 ```
 
 #### `OPENROUTER_MODEL` (Optional)
