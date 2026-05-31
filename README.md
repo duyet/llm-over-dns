@@ -83,8 +83,14 @@ dig @localhost -p 5353 'explain docker in one sentence' TXT +short
 
 ## 💡 How It Works
 
-```
-DNS Query → Server (Rust + Tokio) → OpenRouter API → LLM → Chunked Response → DNS TXT Records
+```mermaid
+graph TD
+    Client["DNS Client (e.g., dig)"] -->|1. TXT Query| Server["DNS Server (Rust + Tokio)"]
+    Server -->|2. HTTP Request| Gateway["LLM Gateway (OpenRouter/AnyRouter)"]
+    Gateway -->|3. Inference| LLM["LLM (e.g., Llama, Nemotron)"]
+    LLM -->|4. Response text| Gateway
+    Gateway -->|5. HTTP Response| Server
+    Server -->|6. Chunked TXT Records| Client
 ```
 
 1. **DNS Query**: You send a question as a DNS TXT query
