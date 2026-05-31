@@ -43,39 +43,50 @@ dig @localhost -p 5353 'explain quantum computing in simple terms' TXT +short
 
 ## 🚀 Quick Start (2 minutes)
 
-### Option 1: Docker (Fastest)
+### 1. Start the DNS Server
 
 ```bash
-# Get free API key from https://openrouter.io (30 seconds)
-docker run -p 5353:53/udp \
-  -e OPENROUTER_API_KEY=your_key_here \
-  ghcr.io/duyet/llm-over-dns:latest
-
-# Query AI
-dig @localhost -p 5353 'tell me a joke' TXT +short
-```
-
-### Option 2: From Source
-
-```bash
-# 1. Clone and setup
+# 1. Clone and navigate to the project
 git clone https://github.com/duyet/llm-over-dns.git
 cd llm-over-dns
-cp .env.example .env
 
-# 2. Add your free API key to .env
-# Get it from https://openrouter.io
-echo "OPENROUTER_API_KEY=your_key_here" >> .env
+# 2. Configure your API key
+# For AnyRouter (Recommended):
+echo "ANYROUTER_API_KEY=your_key_here" > .env
+# For OpenRouter:
+# echo "OPENROUTER_API_KEY=your_key_here" > .env
 
-# 3. Run (port 5353 doesn't require sudo)
-DNS_PORT=5353 cargo run --release
-
-# 4. Ask anything!
-dig @localhost -p 5353 'what is rust programming' TXT +short
-dig @localhost -p 5353 'explain docker in one sentence' TXT +short
+# 3. Run the DNS server on a non-privileged port
+DNS_PORT=5454 cargo run --release
 ```
 
-**That's it!** You're now querying AI through DNS. 🎉
+**Expected Startup Log:**
+```text
+=== Configuration ===
+Provider: AnyRouter API (https://anyrouter.dev)
+API Key: sk-ar-v1...*** (masked)
+Models (with fallback): ["google/gemini-2.5-flash-lite", "meta/llama-3.2-3b-instruct"]
+DNS Server: 0.0.0.0:5454
+
+=== Server Ready ===
+Press Ctrl+C to stop
+Server task starting...
+DNS server listening on 0.0.0.0:5454
+Waiting for DNS queries...
+```
+
+### 2. Send a Test Prompt
+
+In another terminal window, send your prompt as a standard DNS `TXT` query:
+
+```bash
+dig @localhost -p 5454 'what is rust programming in one sentence' TXT +time=30 +short
+```
+
+**Expected Response Output:**
+```text
+"Rust is a systems programming language focused on safety, speed, and concurrency, designed to prevent common programming errors like null pointer dereferences and data races."
+```
 
 ---
 
