@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>llm-over-dns — Query LLMs over DNS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #F3F1E9;
+    --bg-2: #EDEAE0;
+    --card: #FBFAF5;
+    --ink: #1C1B17;
+    --ink-soft: #45433C;
+    --muted: #8C887C;
+    --line: #E2DECF;
+    --line-soft: #EAE6DA;
+    --accent: #C5694A;
+    --accent-deep: #A8512F;
+    --accent-wash: #F3E2D8;
+    --term-bg: #211F1A;
+    --term-panel: #2B2922;
+    --term-ink: #ECE8DB;
+    --term-dim: #908B7A;
+    --term-green: #9DB07C;
+    --term-coral: #DD9573;
+    --term-blue: #8FAAC0;
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: var(--accent-wash); color: var(--accent-deep); }
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+
+  /* ---------- Nav ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--ink); color: var(--bg);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+  }
+  .brand-name { font-family: var(--mono); font-size: 15.5px; font-weight: 500; letter-spacing: -0.02em; }
+  .nav-links { display: flex; align-items: center; gap: 24px; }
+  .nav-links a.nlink { color: var(--ink-soft); font-size: 14.5px; font-weight: 500; white-space: nowrap; transition: color .15s; }
+  .nav-links a.nlink:hover { color: var(--ink); }
+  .ghbtn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--ink); color: var(--bg);
+    padding: 8px 15px; border-radius: 9px;
+    font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+    transition: transform .12s, background .2s;
+  }
+  .ghbtn:hover { background: #000; transform: translateY(-1px); }
+  .ghbtn svg { width: 16px; height: 16px; }
+  @media (max-width: 760px) { .nav-links .nlink { display: none; } }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 40px 0 28px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    color: var(--accent-deep); letter-spacing: 0.01em;
+    background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    padding: 5px 12px; border-radius: 100px; margin-bottom: 18px;
+  }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  h1.hero-title {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(38px, 5vw, 60px); line-height: 1.0;
+    letter-spacing: -0.025em; color: var(--ink);
+    max-width: 20ch; text-wrap: balance;
+  }
+  h1.hero-title em { font-style: italic; color: var(--accent); }
+  .hero-sub {
+    margin-top: 18px; max-width: 56ch;
+    font-size: 17px; line-height: 1.5; color: var(--ink-soft);
+  }
+  .hero-sub code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: var(--bg-2); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 6px; color: var(--ink);
+  }
+  .cta-row { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 11px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 18px; border-radius: 10px;
+    font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em;
+    transition: transform .12s, box-shadow .2s, background .2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 0 rgba(0,0,0,.06); }
+  .btn-primary:hover { background: var(--accent-deep); transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn-ghost:hover { background: var(--card); transform: translateY(-1px); }
+  .btn svg { width: 17px; height: 17px; }
+  .hero-grid {
+    margin-top: 34px;
+    display: grid; grid-template-columns: 1fr; gap: 0;
+  }
+
+  /* ---------- Terminal ---------- */
+  .terminal {
+    background: var(--term-bg);
+    border-radius: 16px;
+    box-shadow: 0 30px 60px -28px rgba(40,30,20,.45), 0 2px 8px rgba(40,30,20,.10);
+    overflow: hidden;
+    border: 1px solid #34322B;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 13px 16px; background: var(--term-panel);
+    border-bottom: 1px solid #36342C;
+  }
+  .term-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .term-dot.r { background: #E0795F; }
+  .term-dot.y { background: #E3B765; }
+  .term-dot.g { background: #93AE74; }
+  .term-title {
+    margin-left: 10px; font-family: var(--mono); font-size: 12.5px;
+    color: var(--term-dim); letter-spacing: 0.01em;
+  }
+  .term-body {
+    padding: 22px 22px 24px;
+    font-family: var(--mono); font-size: 14.5px; line-height: 1.75;
+    color: var(--term-ink);
+    min-height: 232px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .tl { display: block; }
+  .tl .p { color: var(--term-green); }
+  .tl .cmd { color: var(--term-ink); }
+  .tl .q { color: var(--term-coral); }
+  .tl .flag { color: var(--term-blue); }
+  .tl .muted { color: var(--term-dim); }
+  .tl .ans { color: var(--term-ink); }
+  .cursor {
+    display: inline-block; width: 8.5px; height: 1.05em;
+    background: var(--term-coral); vertical-align: -2px;
+    margin-left: 2px; animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+
+  .prompt-chips {
+    display: flex; flex-wrap: wrap; gap: 9px;
+    padding: 14px 16px; background: var(--term-panel);
+    border-top: 1px solid #36342C;
+  }
+  .chip {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 400;
+    color: var(--term-ink); cursor: pointer;
+    background: #34322A; border: 1px solid #413E34;
+    padding: 6px 12px; border-radius: 100px;
+    transition: background .15s, border-color .15s, transform .1s;
+    user-select: none;
+  }
+  .chip:hover { background: #3E3B31; border-color: var(--term-coral); }
+  .chip:active { transform: scale(.97); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip-label {
+    font-family: var(--mono); font-size: 11.5px; color: var(--term-dim);
+    padding: 14px 16px 0; background: var(--term-panel);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  /* ---------- Section scaffolding ---------- */
+  section { padding: 56px 0; }
+  .sec-tag {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 500;
+    color: var(--accent-deep); letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .sec-title {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(26px, 3vw, 36px); line-height: 1.06;
+    letter-spacing: -0.02em; max-width: 22ch; text-wrap: balance;
+  }
+  .sec-lead {
+    margin-top: 14px; max-width: 60ch;
+    font-size: 16.5px; color: var(--ink-soft);
+  }
+  .divider { border: none; border-top: 1px solid var(--line); }
+
+  /* ---------- Features ---------- */
+  #features { background: var(--card); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .feat-grid {
+    margin-top: 32px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft); border-radius: 16px; overflow: hidden;
+  }
+  .feat {
+    background: var(--card); padding: 22px 22px 24px;
+    display: flex; flex-direction: column; gap: 9px;
+    transition: background .2s;
+  }
+  .feat:hover { background: #fff; }
+  .feat-ico {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--accent-wash); color: var(--accent-deep);
+    display: grid; place-items: center; margin-bottom: 4px;
+  }
+  .feat-ico svg { width: 21px; height: 21px; }
+  .feat h3 { font-size: 17.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .feat p { font-size: 15px; color: var(--ink-soft); line-height: 1.55; }
+  @media (max-width: 860px) { .feat-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .feat-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- How it works ---------- */
+  .flow {
+    margin-top: 34px;
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+    align-items: stretch; gap: 0;
+    position: relative;
+  }
+  .node {
+    position: relative; padding: 26px 22px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; z-index: 2;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .flow-col { display: flex; flex-direction: column; align-items: stretch; padding: 0 11px; }
+  .step-num {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: #fff; background: var(--accent); width: 24px; height: 24px;
+    border-radius: 7px; display: grid; place-items: center;
+  }
+  .node h4 { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .node p { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+  .node .kind { font-family: var(--mono); font-size: 11px; color: var(--accent-deep); letter-spacing: .03em; }
+  .flow-arrow {
+    display: grid; place-items: center; color: var(--accent);
+    padding: 14px 0;
+  }
+  .flow-arrow svg { width: 22px; height: 22px; }
+  .roundtrip {
+    margin-top: 26px; display: flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 13px; color: var(--ink-soft);
+    background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    padding: 13px 18px; border-radius: 12px;
+  }
+  .roundtrip b { color: var(--accent-deep); font-weight: 600; }
+  @media (max-width: 820px) {
+    .flow { grid-template-columns: 1fr; }
+    .flow-col { padding: 0; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+
+  /* ---------- Quick start ---------- */
+  #start { background: var(--bg-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .qs-grid { margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .code {
+    background: var(--term-bg); border-radius: 14px; overflow: hidden;
+    border: 1px solid #34322B;
+    box-shadow: 0 18px 36px -26px rgba(40,30,20,.4);
+  }
+  .code-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 15px; background: var(--term-panel); border-bottom: 1px solid #36342C;
+  }
+  .code-head .label {
+    font-family: var(--mono); font-size: 12px; color: var(--term-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .code-head .step {
+    font-family: var(--mono); font-size: 11px; color: #fff;
+    background: var(--accent); padding: 2px 8px; border-radius: 100px; font-weight: 600;
+  }
+  .copy {
+    font-family: var(--mono); font-size: 11.5px; color: var(--term-dim);
+    cursor: pointer; background: transparent; border: 1px solid #413E34;
+    padding: 4px 9px; border-radius: 7px; transition: all .15s;
+  }
+  .copy:hover { color: var(--term-ink); border-color: var(--term-coral); }
+  pre {
+    padding: 18px 18px 20px; font-family: var(--mono); font-size: 13.5px;
+    line-height: 1.7; color: var(--term-ink); overflow-x: auto;
+  }
+  pre .c { color: var(--term-dim); }
+  pre .g { color: var(--term-green); }
+  pre .q { color: var(--term-coral); }
+  pre .b { color: var(--term-blue); }
+  @media (max-width: 760px) { .qs-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- Use cases ---------- */
+  .uc-grid { margin-top: 32px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .uc {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 24px 24px 22px;
+    display: flex; gap: 18px; transition: transform .15s, box-shadow .2s;
+  }
+  .uc:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -22px rgba(40,30,20,.4); }
+  .uc-n {
+    font-family: var(--serif); font-size: 26px; font-style: italic;
+    color: var(--accent); line-height: 1; flex-shrink: 0; padding-top: 2px;
+    min-width: 30px;
+  }
+  .uc h4 { font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 6px; }
+  .uc p { font-size: 14.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 12px; }
+  .uc .uc-cmd {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+    background: var(--bg-2); border: 1px solid var(--line);
+    padding: 8px 11px; border-radius: 8px; display: block; overflow-x: auto; white-space: nowrap;
+  }
+  .uc .uc-cmd .q { color: var(--accent-deep); }
+  @media (max-width: 700px) { .uc-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- Docs ---------- */
+  #docs { background: var(--card); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .docs-grid { margin-top: 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .doc {
+    display: flex; align-items: flex-start; gap: 14px;
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 18px;
+    transition: transform .15s, border-color .2s, box-shadow .2s;
+  }
+  .doc:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); box-shadow: 0 12px 26px -22px rgba(40,30,20,.4); }
+  .doc-ico {
+    width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+    background: var(--accent-wash); color: var(--accent-deep);
+    display: grid; place-items: center;
+  }
+  .doc-ico svg { width: 18px; height: 18px; }
+  .doc h4 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 6px; }
+  .doc h4 .arr { color: var(--muted); transition: transform .15s, color .15s; }
+  .doc:hover h4 .arr { transform: translate(2px,-2px); color: var(--accent); }
+  .doc p { font-size: 13px; color: var(--muted); line-height: 1.45; margin-top: 3px; }
+  @media (max-width: 820px) { .docs-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 540px) { .docs-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- Footer ---------- */
+  footer {
+    border-top: 1px solid var(--line); padding: 56px 0 48px;
+    background: var(--card);
+  }
+  .foot-top { display: flex; justify-content: space-between; gap: 40px; flex-wrap: wrap; }
+  .foot-brand { max-width: 34ch; }
+  .foot-brand p { margin-top: 14px; color: var(--ink-soft); font-size: 15px; }
+  .foot-cols { display: flex; gap: 64px; flex-wrap: wrap; }
+  .foot-col h5 {
+    font-family: var(--mono); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px;
+  }
+  .foot-col a { display: block; color: var(--ink-soft); font-size: 14.5px; padding: 4px 0; transition: color .15s; }
+  .foot-col a:hover { color: var(--accent-deep); }
+  .foot-bottom {
+    margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    font-size: 13.5px; color: var(--muted); font-family: var(--mono);
+  }
+  .foot-bottom a:hover { color: var(--accent-deep); }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">⌁</span>
+      <span class="brand-name">llm-over-dns</span>
+    </a>
+    <nav class="nav-links">
+      <a class="nlink" href="#demo">Demo</a>
+      <a class="nlink" href="#features">Features</a>
+      <a class="nlink" href="#start">Quick start</a>
+      <a class="nlink" href="#how">How it works</a>
+      <a class="nlink" href="#docs">Docs</a>
+      <a class="ghbtn" href="https://github.com/duyet/llm-over-dns" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        Star
+      </a>
+    </nav>
+  </div>
+</header>
+
+<a id="top"></a>
+<main>
+
+  <!-- HERO -->
+  <section class="hero" id="demo" style="padding-top:34px;">
+    <div class="wrap">
+      <span class="eyebrow"><span class="dot"></span>Open source · Rust + Tokio · MIT</span>
+      <h1 class="hero-title">Query large language models <em>over&nbsp;DNS.</em></h1>
+      <p class="hero-sub">A high-performance DNS server that answers <code>TXT</code> queries with AI-generated responses. No HTTP, no SDK, no special client — just <code>dig</code>. Works on every device, even where HTTP is blocked.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#start">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          Quick start
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/duyet/llm-over-dns" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+
+      <div class="hero-grid">
+        <div class="terminal" id="term">
+          <div class="term-bar">
+            <span class="term-dot r"></span><span class="term-dot y"></span><span class="term-dot g"></span>
+            <span class="term-title">bash — dig over llm-over-dns</span>
+          </div>
+          <div class="term-body" id="termBody"></div>
+          <div class="chip-label">Try a query ↓</div>
+          <div class="prompt-chips" id="chips"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-tag">Why it's neat</div>
+      <h2 class="sec-title">A whole AI gateway hiding inside a DNS query.</h2>
+      <p class="sec-lead">DNS reaches everywhere and slips through almost any firewall. llm-over-dns turns that ubiquity into an LLM endpoint you can hit with tools you already have.</p>
+      <div class="feat-grid" id="featGrid"></div>
+    </div>
+  </section>
+
+  <!-- QUICK START -->
+  <section id="start">
+    <div class="wrap">
+      <div class="sec-tag">Quick start</div>
+      <h2 class="sec-title">Running in about two minutes.</h2>
+      <p class="sec-lead">Clone, drop in an API key, and run on a non-privileged port. Then ask anything from a second terminal.</p>
+      <div class="qs-grid" id="qsGrid"></div>
+    </div>
+  </section>
+
+  <!-- USE CASES -->
+  <section id="usecases">
+    <div class="wrap">
+      <div class="sec-tag">Use cases</div>
+      <h2 class="sec-title">Where a DNS-shaped LLM actually shines.</h2>
+      <div class="uc-grid" id="ucGrid"></div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="wrap">
+      <div class="sec-tag">How it works</div>
+      <h2 class="sec-title">From <em style="font-style:italic;color:var(--accent)">dig</em> to answer in one round trip.</h2>
+      <p class="sec-lead">Your question travels as a TXT query. The server forwards it to an LLM gateway, then streams the answer back as DNS records — chunked to fit the 255-character limit.</p>
+
+      <div class="flow" id="flow"></div>
+
+      <div class="roundtrip">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M3 12a9 9 0 1 0 9-9M3 12l3-3M3 12l3 3"/></svg>
+        <span><b>On the way back:</b> long answers are split into <b>255-char TXT records</b>, with automatic <b>model fallback</b> if the primary model fails.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCS -->
+  <section id="docs">
+    <div class="wrap">
+      <div class="sec-tag">Documentation</div>
+      <h2 class="sec-title">Read deeper.</h2>
+      <p class="sec-lead">Full guides live in the repo's <code style="font-family:var(--mono);font-size:0.86em;background:var(--bg-2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;">docs/</code> directory.</p>
+      <div class="docs-grid" id="docsGrid"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a class="brand" href="#top">
+          <span class="brand-mark">⌁</span>
+          <span class="brand-name">llm-over-dns</span>
+        </a>
+        <p>Ask AI anything with standard DNS tools. Async Rust, 100% test coverage, Docker-ready. Built by AI, improved by humans.</p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h5>Project</h5>
+          <a href="https://github.com/duyet/llm-over-dns" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://ghcr.io/duyet/llm-over-dns" target="_blank" rel="noopener">Docker images</a>
+          <a href="https://github.com/duyet/llm-over-dns/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </div>
+        <div class="foot-col">
+          <h5>Docs</h5>
+          <a href="https://github.com/duyet/llm-over-dns/blob/master/docs/GETTING_STARTED.md" target="_blank" rel="noopener">Getting started</a>
+          <a href="https://github.com/duyet/llm-over-dns/blob/master/docs/ARCHITECTURE.md" target="_blank" rel="noopener">Architecture</a>
+          <a href="https://github.com/duyet/llm-over-dns/blob/master/docs/configuration.md" target="_blank" rel="noopener">Configuration</a>
+        </div>
+        <div class="foot-col">
+          <h5>Providers</h5>
+          <a href="https://anyrouter.dev" target="_blank" rel="noopener">AnyRouter</a>
+          <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a>
+          <a href="https://duyet.net" target="_blank" rel="noopener">Author — duyet.net</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>MIT © 2025 · duyet</span>
+      <span>dig @localhost -p 5353 'hello' TXT +short</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
