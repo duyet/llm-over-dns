@@ -138,13 +138,15 @@ mod tests {
 
         assert!(limiter.check_allowed(ip1));
 
-        // Wait 50ms and check ip2 to make its last_update newer
-        std::thread::sleep(Duration::from_millis(50));
+        // Wait 200ms and check ip2 to make its last_update newer.
+        std::thread::sleep(Duration::from_millis(200));
         assert!(limiter.check_allowed(ip2));
 
-        // Clean up buckets inactive for > 20ms
-        // Since we slept, ip1 is > 50ms old, so it should be deleted.
-        limiter.cleanup(Duration::from_millis(20));
+        // Clean up buckets inactive for > 100ms. ip1 is now ~200ms old (deleted);
+        // ip2 was just touched. The 100ms threshold leaves a wide margin against
+        // scheduler jitter between touching ip2 and running cleanup, so ip2 is
+        // reliably kept (a tighter threshold made this test flaky under load).
+        limiter.cleanup(Duration::from_millis(100));
 
         // Total clients should be 1 (only ip2 remains active/recent)
         let clients = limiter.clients.lock().unwrap();
