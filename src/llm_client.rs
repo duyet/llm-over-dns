@@ -211,11 +211,21 @@ impl LlmClient {
             presence_penalty: self.presence_penalty,
         };
 
+        // App-attribution headers so the request is identified in the provider's
+        // dashboard instead of falling back to a raw User-Agent fingerprint.
+        // `HTTP-Referer`/`X-Title` are the OpenRouter convention; the
+        // `X-AnyRouter-*` triplet is read by AnyRouter. Both providers ignore
+        // headers they don't recognize, so we send all of them unconditionally.
         let response = self
             .http_client
             .post(&self.base_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
+            .header("HTTP-Referer", env!("CARGO_PKG_REPOSITORY"))
+            .header("X-Title", "LLM over DNS")
+            .header("X-AnyRouter-Title", "LLM over DNS")
+            .header("X-AnyRouter-Source", env!("CARGO_PKG_NAME"))
+            .header("X-AnyRouter-Version", env!("CARGO_PKG_VERSION"))
             .json(&request)
             .send()
             .await
