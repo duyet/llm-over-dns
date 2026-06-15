@@ -287,6 +287,8 @@ mod tests {
     #[serial]
     fn test_config_default_values() {
         // Clean all environment variables first
+        env::remove_var("ANYROUTER_API_KEY");
+        env::remove_var("ANYROUTER_MODEL");
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("OPENROUTER_MODEL");
         env::remove_var("SYSTEM_PROMPT");
