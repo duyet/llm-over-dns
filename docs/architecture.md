@@ -84,7 +84,7 @@ Let's trace a typical request:
 
 ## 🛠️ Testing & Quality Gates
 
-* **100% Test Coverage**: The project maintains comprehensive test coverage encompassing:
+* **Test Coverage (~63% of lines, 60% enforced)**: Coverage spans:
   * Unit tests in each module (`assert_matches` assertions).
   * Integration end-to-end tests (`tests/integration_test.rs`) simulating actual UDP server/client sockets.
   * Doc tests verifying code examples.

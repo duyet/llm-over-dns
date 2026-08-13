@@ -5,7 +5,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/duyet/llm-over-dns/workflows/CI/badge.svg)](https://github.com/duyet/llm-over-dns/actions)
-[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#-for-developers)
+[![Coverage](https://img.shields.io/badge/coverage-62%25-yellow)](#-for-developers)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://ghcr.io/duyet/llm-over-dns)
 
 A high-performance DNS server that responds to TXT queries with AI-generated answers via **AnyRouter (Recommended)** or **OpenRouter**. Ask AI anything using standard DNS tools—no special clients required.
@@ -46,7 +46,7 @@ dig +short TXT "hello.llm-over-dns.duyet.net"
 - **🔄 Auto Fallback** - Multiple AI models with automatic failover
 - **🆓 Flexible Providers** - Powered by **AnyRouter (Recommended)** or OpenRouter's API models
 - **🐳 Docker Ready** - Multi-arch images (amd64, arm64)
-- **✅ 100% Test Coverage** - Comprehensive test suite with CI/CD
+- **✅ Tested & Automated** - Unit, integration and doc tests enforced by CI/CD
 - **📦 Cross-Platform** - Binaries for Linux, macOS, Windows
 
 ### 🎪 Why This Exists
@@ -308,7 +308,7 @@ dig +timeout=10 @localhost -p 5353 'explain quantum physics' TXT +short
 cargo build
 cargo build --release  # Optimized
 
-# Run tests (100% coverage)
+# Run tests
 cargo test
 cargo test -- --nocapture  # With output
 
@@ -340,7 +340,7 @@ See [CLAUDE.md](CLAUDE.md) for complete development guide.
 ## 🤔 FAQ
 
 **Q: Is this production-ready?**
-A: Yes! 100% test coverage, CI/CD, security scanning, and Docker support. Consider rate limiting for public deployments.
+A: It has CI/CD, security scanning, Docker support and a test suite covering ~63% of lines. Rate limiting is built in - review the limits before exposing it publicly.
 
 **Q: What if DNS times out?**
 A: Increase timeout: `dig +timeout=10 @localhost 'complex query' TXT`
@@ -367,7 +367,7 @@ A: DNS is unencrypted by design. Don't send sensitive data. Consider DoT/DoH in 
 
 ## 📊 Performance & Testing
 
-### Test Coverage: 100%
+### Test Coverage: ~63%
 
 Comprehensive test suite with unit and integration tests:
 - Config loading and validation
