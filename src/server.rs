@@ -386,6 +386,33 @@ impl Server {
     }
 }
 
+/// Largest UDP response permitted to a client that sent no EDNS0 OPT record.
+///
+/// RFC 1035 §4.2.1 fixes the plain-DNS UDP message size at 512 bytes.
+const DEFAULT_MAX_UDP_RESPONSE: usize = 512;
+
+/// Ceiling applied even when a client advertises a larger EDNS0 buffer.
+///
+/// 1232 bytes is the DNS Flag Day 2020 recommendation: it stays under the
+/// common 1280-byte IPv6 MTU so responses avoid IP fragmentation, and it bounds
+/// the amplification factor available to an attacker spoofing a source address.
+const MAX_UDP_RESPONSE: usize = 1232;
+
+/// Determine how many bytes of UDP response this client may receive.
+///
+/// A client advertises its receive buffer in the EDNS0 OPT record (RFC 6891).
+/// Absent that, plain DNS limits us to [`DEFAULT_MAX_UDP_RESPONSE`]. The value
+/// is clamped into `[DEFAULT_MAX_UDP_RESPONSE, MAX_UDP_RESPONSE]` so a spoofed
+/// query cannot request a large datagram.
+fn client_udp_payload_size(request: &Message) -> usize {
+    request
+        .edns
+        .as_ref()
+        .map(|edns| edns.max_payload() as usize)
+        .unwrap_or(DEFAULT_MAX_UDP_RESPONSE)
+        .clamp(DEFAULT_MAX_UDP_RESPONSE, MAX_UDP_RESPONSE)
+}
+
 /// Handles a single incoming DNS request and sends the response
 ///
 /// # Arguments
@@ -482,7 +509,24 @@ async fn handle_dns_request(
     response.metadata.response_code = response_code;
 
     // Serialize DNS response to bytes
-    let response_bytes = response.to_vec()?;
+    let mut response_bytes = response.to_vec()?;
+
+    // Cap the datagram at what the client is entitled to receive. UDP source
+    // addresses are trivially spoofed, so an unbounded response turns this
+    // server into an amplifier: a ~50 byte query would otherwise return up to
+    // the chunker's 4096 byte limit. Over the budget we drop the answers and
+    // set TC, which tells a legitimate client to retry over TCP (RFC 1035
+    // §4.2.1) while giving a spoofing attacker almost no amplification.
+    let max_response_size = client_udp_payload_size(&request_msg);
+    if response_bytes.len() > max_response_size {
+        debug!(
+            "Response {} bytes exceeds client budget {}, truncating",
+            response_bytes.len(),
+            max_response_size
+        );
+        response_bytes = response.truncate().to_vec()?;
+    }
+
     debug!(
         "Serialized response: {} bytes, code: {:?}",
         response_bytes.len(),
@@ -502,6 +546,7 @@ async fn handle_dns_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hickory_server::proto::op::Edns;
 
     #[test]
     fn test_server_creation() -> Result<()> {
@@ -552,5 +597,78 @@ mod tests {
 
         // Handler should be created successfully
         assert!(Arc::strong_count(&handler.llm_client) > 0);
+    }
+
+    #[test]
+    fn test_udp_payload_size_defaults_to_512_without_edns() {
+        // A plain-DNS client advertises nothing, so RFC 1035's 512 byte cap applies.
+        let msg = Message::new(1, MessageType::Query, OpCode::Query);
+        assert_eq!(client_udp_payload_size(&msg), DEFAULT_MAX_UDP_RESPONSE);
+    }
+
+    #[test]
+    fn test_udp_payload_size_honors_edns_advertisement() {
+        let mut msg = Message::new(1, MessageType::Query, OpCode::Query);
+        let mut edns = Edns::new();
+        edns.set_max_payload(1000);
+        msg.set_edns(edns);
+
+        assert_eq!(client_udp_payload_size(&msg), 1000);
+    }
+
+    #[test]
+    fn test_udp_payload_size_clamps_oversized_advertisement() {
+        // An attacker spoofing a source address would advertise the largest
+        // buffer possible to maximise amplification. Cap it.
+        let mut msg = Message::new(1, MessageType::Query, OpCode::Query);
+        let mut edns = Edns::new();
+        edns.set_max_payload(u16::MAX);
+        msg.set_edns(edns);
+
+        assert_eq!(client_udp_payload_size(&msg), MAX_UDP_RESPONSE);
+    }
+
+    #[test]
+    fn test_udp_payload_size_raises_undersized_advertisement() {
+        // Below 512 we still owe the client a usable response.
+        let mut msg = Message::new(1, MessageType::Query, OpCode::Query);
+        let mut edns = Edns::new();
+        edns.set_max_payload(0);
+        msg.set_edns(edns);
+
+        assert_eq!(client_udp_payload_size(&msg), DEFAULT_MAX_UDP_RESPONSE);
+    }
+
+    #[test]
+    fn test_oversized_response_truncates_and_sets_tc_bit() {
+        // Build a response far larger than any client budget, mirroring what a
+        // long LLM answer produces, and confirm the wire form we would send is
+        // bounded and carries TC so the client retries over TCP.
+        let name = Name::from_utf8("what.is.rust.").unwrap();
+        let mut response = Message::new(42, MessageType::Response, OpCode::Query);
+        response.metadata.authoritative = true;
+        for _ in 0..16 {
+            let txt = TXT::new(vec!["x".repeat(250)]);
+            response.add_answer(Record::from_rdata(name.clone(), 300, RData::TXT(txt)));
+        }
+
+        let full = response.to_vec().unwrap();
+        assert!(
+            full.len() > MAX_UDP_RESPONSE,
+            "fixture should exceed the cap, got {} bytes",
+            full.len()
+        );
+
+        let truncated = response.truncate();
+        let bytes = truncated.to_vec().unwrap();
+
+        assert!(truncated.metadata.truncation, "TC bit must be set");
+        assert!(truncated.answers.is_empty(), "answers must be dropped");
+        assert!(
+            bytes.len() <= DEFAULT_MAX_UDP_RESPONSE,
+            "truncated response should fit the smallest budget, got {} bytes",
+            bytes.len()
+        );
+        assert_eq!(truncated.metadata.id, 42, "query id must be preserved");
     }
 }
