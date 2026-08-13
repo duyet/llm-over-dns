@@ -300,7 +300,11 @@ impl Server {
 
         // Wrap socket in Arc for sharing across tasks
         let socket = Arc::new(socket);
-        let mut buffer = vec![0u8; 512];
+        // recv_from silently discards whatever does not fit, so a 512-byte
+        // buffer truncated any EDNS0-sized query into an unparseable fragment:
+        // Message::from_vec then failed and the client got no reply at all,
+        // just a timeout. Size for the largest datagram we are willing to read.
+        let mut buffer = vec![0u8; MAX_UDP_REQUEST];
 
         // Subscribe to shutdown signal
         let mut shutdown_rx = self.shutdown_tx.subscribe();
@@ -385,6 +389,13 @@ impl Server {
         format!("{}:{}", self.config.dns_address, self.config.dns_port)
     }
 }
+
+/// Size of the UDP receive buffer.
+///
+/// Large enough for any EDNS0 query a client may send; anything beyond this is
+/// discarded by the kernel and will fail to parse, which is the correct outcome
+/// for a datagram that large.
+const MAX_UDP_REQUEST: usize = 4096;
 
 /// Largest UDP response permitted to a client that sent no EDNS0 OPT record.
 ///
