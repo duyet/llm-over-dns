@@ -159,10 +159,17 @@ impl Config {
             "nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free"
         };
 
-        // Load models from environment variables
-        let openrouter_model_str = env::var("ANYROUTER_MODEL")
-            .or_else(|_| env::var("OPENROUTER_MODEL"))
-            .unwrap_or_else(|_| default_models.to_string());
+        // Load models from the variable belonging to the active provider. Reading
+        // ANYROUTER_MODEL unconditionally meant an OpenRouter user with a leftover
+        // ANYROUTER_MODEL sent AnyRouter-namespaced model ids to openrouter.ai,
+        // where every model in the fallback chain 404s and every query SERVFAILs.
+        let model_var = if is_anyrouter {
+            "ANYROUTER_MODEL"
+        } else {
+            "OPENROUTER_MODEL"
+        };
+        let openrouter_model_str =
+            env::var(model_var).unwrap_or_else(|_| default_models.to_string());
 
         // Parse comma-separated models, trim whitespace, and filter out empty strings
         let openrouter_models: Vec<String> = openrouter_model_str
@@ -366,6 +373,50 @@ mod tests {
 
         env::remove_var("OPENROUTER_API_KEY");
         env::remove_var("DNS_PORT");
+    }
+
+    #[test]
+    #[serial]
+    fn test_openrouter_provider_ignores_anyrouter_model() {
+        // A leftover ANYROUTER_MODEL used to win regardless of provider, so an
+        // OpenRouter user sent AnyRouter model ids to openrouter.ai and every
+        // query SERVFAILed. The active provider must pick its own variable.
+        env::set_var("OPENROUTER_API_KEY", "test_key");
+        env::set_var("ANYROUTER_MODEL", "google/gemini-2.5-flash-lite");
+        env::remove_var("OPENROUTER_MODEL");
+
+        let config = Config::from_env().expect("Failed to load config");
+
+        assert!(
+            !config
+                .openrouter_models
+                .contains(&"google/gemini-2.5-flash-lite".to_string()),
+            "AnyRouter model leaked into an OpenRouter config: {:?}",
+            config.openrouter_models
+        );
+        assert!(config.llm_base_url.contains("openrouter.ai"));
+
+        env::remove_var("OPENROUTER_API_KEY");
+        env::remove_var("ANYROUTER_MODEL");
+    }
+
+    #[test]
+    #[serial]
+    fn test_anyrouter_provider_uses_anyrouter_model() {
+        env::remove_var("OPENROUTER_API_KEY");
+        env::set_var("ANYROUTER_API_KEY", "sk-ar-test_key");
+        env::set_var("ANYROUTER_MODEL", "vendor/model-a,vendor/model-b");
+
+        let config = Config::from_env().expect("Failed to load config");
+
+        assert_eq!(
+            config.openrouter_models,
+            vec!["vendor/model-a".to_string(), "vendor/model-b".to_string()]
+        );
+        assert!(config.llm_base_url.contains("anyrouter.dev"));
+
+        env::remove_var("ANYROUTER_API_KEY");
+        env::remove_var("ANYROUTER_MODEL");
     }
 
     #[test]
