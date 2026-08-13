@@ -18,6 +18,12 @@ impl Default for Chunker {
     }
 }
 
+/// Widest possible UTF-8 encoding of a single `char`, in bytes.
+///
+/// A chunk budget below this cannot hold even one character, so it is used as the
+/// lower bound for [`Chunker::with_sizes`].
+pub const MAX_UTF8_CHAR_LEN: usize = 4;
+
 impl Chunker {
     /// Create a new chunker with default settings
     ///
@@ -32,9 +38,14 @@ impl Chunker {
     }
 
     /// Create a new chunker with custom settings
+    ///
+    /// `max_chunk_size` is clamped to a minimum of [`MAX_UTF8_CHAR_LEN`]. A chunk
+    /// budget smaller than the widest UTF-8 character leaves `chunk_text` unable to
+    /// fit even one character per chunk, which would make it spin without consuming
+    /// any input.
     pub fn with_sizes(max_chunk_size: usize, max_total_size: usize) -> Self {
         Self {
-            max_chunk_size,
+            max_chunk_size: max_chunk_size.max(MAX_UTF8_CHAR_LEN),
             max_total_size,
         }
     }
@@ -81,6 +92,14 @@ impl Chunker {
 
             // Find the safe split point that doesn't break UTF-8 characters
             let split_point = Self::find_char_boundary(remaining, chunk_size);
+
+            // `with_sizes` clamps `max_chunk_size` so a boundary is always found, but
+            // bail out rather than loop forever if that invariant is ever broken:
+            // a zero split point yields an empty chunk and an unchanged remainder.
+            debug_assert!(split_point > 0, "chunk size {chunk_size} fits no character");
+            if split_point == 0 {
+                break;
+            }
 
             let (chunk, rest) = remaining.split_at(split_point);
             chunks.push(chunk.to_string());
@@ -347,6 +366,39 @@ mod tests {
 
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0], text);
+    }
+
+    #[test]
+    fn test_chunk_size_below_char_width_terminates() {
+        // Regression: a chunk size narrower than the first character's UTF-8 width
+        // left find_char_boundary with no boundary to return. Its `0` fallback made
+        // split_at(0) produce an empty chunk and an unchanged remainder, so the loop
+        // spun forever pushing empty strings. with_sizes now clamps the floor.
+        for size in 0..=MAX_UTF8_CHAR_LEN {
+            let chunker = Chunker::with_sizes(size, 4096);
+            let chunks = chunker.chunk_text("🎉"); // 4 bytes, one character
+
+            assert_eq!(
+                chunks,
+                vec!["🎉"],
+                "chunk size {size} lost or split the char"
+            );
+        }
+    }
+
+    #[test]
+    fn test_chunk_size_below_char_width_keeps_all_input() {
+        // The clamp must not silently drop characters that exceed the requested size.
+        let chunker = Chunker::with_sizes(1, 4096);
+        let text = "🎉🌟🎈";
+        let chunks = chunker.chunk_text(text);
+
+        assert_eq!(chunks.concat(), text);
+        assert_eq!(
+            chunks.len(),
+            3,
+            "each 4-byte char should occupy its own chunk"
+        );
     }
 
     #[test]
