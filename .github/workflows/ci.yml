@@ -7,6 +7,10 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -57,8 +61,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
 
       - name: Run security audit
         run: cargo audit
@@ -109,8 +114,9 @@ jobs:
         with:
           cache-all-crates: true
 
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
       - name: Generate coverage
         run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 60
@@ -165,24 +171,24 @@ jobs:
     steps:
       - name: Decide whether the needed jobs passed
         run: |
-          if [[ "${{ needs.fmt.result }}" == "failure" ]]; then
-            echo "❌ Format check failed"
-            exit 1
-          fi
-          if [[ "${{ needs.clippy.result }}" == "failure" ]]; then
-            echo "❌ Clippy check failed"
-            exit 1
-          fi
-          if [[ "${{ needs.audit.result }}" == "failure" ]]; then
-            echo "❌ Security audit failed"
-            exit 1
-          fi
-          if [[ "${{ needs.test.result }}" == "failure" ]]; then
-            echo "❌ Tests failed"
-            exit 1
-          fi
-          if [[ "${{ needs.coverage.result }}" == "failure" ]]; then
-            echo "❌ Coverage check failed"
+          # Any result other than "success" blocks the gate. Comparing only
+          # against "failure" would let a cancelled or skipped job through.
+          failed=0
+          for job in \
+            "Format check:${{ needs.fmt.result }}" \
+            "Clippy:${{ needs.clippy.result }}" \
+            "Security audit:${{ needs.audit.result }}" \
+            "Tests:${{ needs.test.result }}" \
+            "Coverage:${{ needs.coverage.result }}"
+          do
+            name="${job%%:*}"
+            result="${job##*:}"
+            if [[ "$result" != "success" ]]; then
+              echo "❌ $name did not succeed (result: $result)"
+              failed=1
+            fi
+          done
+          if [[ "$failed" == "1" ]]; then
             exit 1
           fi
           echo "✅ All checks passed!"
