@@ -177,9 +177,9 @@ The `LlmClient` supports automatic fallback across multiple models (configured v
 
 ## Testing Strategy
 
-### Current Coverage: 100%
+### Current Coverage: ~63%
 
-The project maintains strict 100% test coverage enforced by CI/CD. Key test categories:
+CI enforces a 60% line-coverage floor via `cargo tarpaulin --fail-under 60`. Key test categories:
 
 1. **Unit Tests**: In-module tests for each component
    - `src/config.rs`: Config loading, validation, environment precedence
@@ -237,7 +237,7 @@ Runs on: Push to master, Pull Requests, Manual trigger
 2. **Linting**: `cargo clippy -- -D warnings`
 3. **Security Audit**: `cargo audit` for known vulnerabilities
 4. **Tests**: Matrix across Rust stable and beta
-5. **Coverage**: `cargo tarpaulin` with 90% minimum + PR comments
+5. **Coverage**: `cargo tarpaulin` with 60% minimum + PR comments
 6. **All Checks**: Aggregate status gate
 
 ### Docker Pipeline (`.github/workflows/docker.yml`)
@@ -258,7 +258,7 @@ Runs on: Tags (v*.*.*), Manual trigger
    - Windows: x86_64
 3. **Upload Assets**: Binaries with SHA256 checksums
 
-All CI checks must pass before merge. Coverage threshold is 90%.
+All CI checks must pass before merge. Coverage threshold is 60%.
 
 ## Documentation
 
@@ -279,7 +279,7 @@ Generate API docs: `cargo doc --open`
 
 1. Write tests first (TDD approach)
 2. Implement feature
-3. Ensure `cargo test` passes with ≥90% coverage
+3. Ensure `cargo test` passes and coverage stays at or above the 60% floor
 4. Run `cargo fmt` and `cargo clippy -- -D warnings`
 5. Update documentation if needed
 6. Push to branch and create PR
@@ -357,5 +357,5 @@ Key dependencies (see `Cargo.toml` for full list):
 2. **Logging**: Use `tracing` macros (`info!`, `debug!`, `error!`) with structured fields
 3. **Formatting**: Follow `rustfmt` defaults (run `cargo fmt` before commit)
 4. **Documentation**: Use `///` doc comments for public APIs with examples
-5. **Testing**: Maintain 100% test coverage; tests live in same file as implementation or `tests/`
+5. **Testing**: Keep coverage at or above the enforced 60% floor; tests live in same file as implementation or `tests/`
 6. **Async**: All I/O operations must be async; use `tokio::spawn` for concurrent tasks
