@@ -10,6 +10,11 @@
 //!   Defaults to `nvidia/nemotron-nano-12b-v2-vl:free`
 //! - `PORT` or `DNS_PORT` (optional): Port to listen on, defaults to 53. `PORT` takes precedence.
 //! - `HOST` or `DNS_ADDRESS` (optional): Address to bind to, defaults to 0.0.0.0. `HOST` takes precedence.
+//! - `MAX_CONCURRENT_LLM_REQUESTS` (optional): Global ceiling on in-flight LLM
+//!   calls, defaults to 32. Set to 0 to disable. Queries arriving over the limit
+//!   are shed with SERVFAIL rather than queued.
+//! - `CACHE_MAX_ENTRIES` (optional): Ceiling on cached responses, defaults to
+//!   10000. Set to 0 for an unbounded cache.
 //!
 //! # Examples
 //!
@@ -79,6 +84,14 @@ pub struct Config {
     pub rate_limit_rps: f64,
     /// Rate limit burst requests per IP (default: 10.0)
     pub rate_limit_burst: f64,
+    /// Maximum LLM API calls in flight at once (default: 32, set to 0 to disable)
+    ///
+    /// Per-IP rate limiting cannot bound this: UDP source addresses are
+    /// spoofable, so rotating sources yields unlimited per-IP allowance. This is
+    /// the global ceiling on concurrent spend and in-flight tasks.
+    pub max_concurrent_llm_requests: usize,
+    /// Maximum cached responses retained (default: 10000, set to 0 to disable)
+    pub cache_max_entries: usize,
 }
 
 impl Config {
@@ -230,6 +243,16 @@ impl Config {
             .parse()
             .unwrap_or(10.0);
 
+        let max_concurrent_llm_requests = env::var("MAX_CONCURRENT_LLM_REQUESTS")
+            .unwrap_or_else(|_| "32".to_string())
+            .parse()
+            .unwrap_or(32);
+
+        let cache_max_entries = env::var("CACHE_MAX_ENTRIES")
+            .unwrap_or_else(|_| "10000".to_string())
+            .parse()
+            .unwrap_or(10000);
+
         Ok(Self {
             openrouter_api_key,
             openrouter_models,
@@ -246,6 +269,8 @@ impl Config {
             cache_ttl_seconds,
             rate_limit_rps,
             rate_limit_burst,
+            max_concurrent_llm_requests,
+            cache_max_entries,
         })
     }
 }
