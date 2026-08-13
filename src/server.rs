@@ -31,7 +31,7 @@ use hickory_server::proto::rr::{Name, RData, Record, RecordType};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Semaphore};
 use tracing::{debug, error, info, warn};
 
 use crate::{Chunker, Config, DnsCache, DnsHandler, IpRateLimiter, LlmClient};
@@ -49,6 +49,8 @@ pub struct LlmDnsHandler {
     chunker: Arc<Chunker>,
     dns_handler: Arc<DnsHandler>,
     pub cache: Arc<DnsCache>,
+    /// Global ceiling on concurrent LLM calls. `None` disables the limit.
+    llm_permits: Option<Arc<Semaphore>>,
 }
 
 impl LlmDnsHandler {
@@ -71,7 +73,18 @@ impl LlmDnsHandler {
             chunker,
             dns_handler,
             cache,
+            llm_permits: None,
         }
+    }
+
+    /// Sets the global ceiling on concurrent LLM calls.
+    ///
+    /// A limit of 0 leaves calls unbounded. Per-IP rate limiting cannot provide
+    /// this bound, because UDP source addresses are spoofable and each unseen
+    /// address starts with a full token bucket.
+    pub fn with_max_concurrent_llm_requests(mut self, limit: usize) -> Self {
+        self.llm_permits = (limit > 0).then(|| Arc::new(Semaphore::new(limit)));
+        self
     }
 
     /// Processes a single DNS query and returns DNS records
@@ -104,6 +117,21 @@ impl LlmDnsHandler {
         // Parse subdomain to get the prompt
         let prompt = self.dns_handler.parse_subdomain(&query_str)?;
         debug!("Parsed prompt: {}", prompt);
+
+        // Take a permit before spending money. try_acquire sheds load rather
+        // than queueing: a spoofed-source flood would otherwise park hundreds of
+        // thousands of tasks waiting on the semaphore, which is the exhaustion
+        // we are trying to prevent. The client sees SERVFAIL and may retry.
+        let _permit = match self.llm_permits.as_ref() {
+            Some(sem) => match sem.clone().try_acquire_owned() {
+                Ok(permit) => Some(permit),
+                Err(_) => {
+                    warn!("LLM concurrency limit reached, shedding query '{}'", prompt);
+                    anyhow::bail!("LLM concurrency limit reached");
+                }
+            },
+            None => None,
+        };
 
         // Query the LLM with the prompt
         let response_text = self.llm_client.query(&prompt).await?;
@@ -197,10 +225,16 @@ impl Server {
         let dns_handler = Arc::new(DnsHandler::new());
 
         // Initialize cache
-        let cache = Arc::new(DnsCache::new(Duration::from_secs(config.cache_ttl_seconds)));
+        let cache = Arc::new(DnsCache::with_capacity(
+            Duration::from_secs(config.cache_ttl_seconds),
+            config.cache_max_entries,
+        ));
 
         // Create the main handler
-        let handler = Arc::new(LlmDnsHandler::new(llm_client, chunker, dns_handler, cache));
+        let handler = Arc::new(
+            LlmDnsHandler::new(llm_client, chunker, dns_handler, cache)
+                .with_max_concurrent_llm_requests(config.max_concurrent_llm_requests),
+        );
 
         // Initialize rate limiter
         let rate_limiter = Arc::new(IpRateLimiter::new(
@@ -577,6 +611,8 @@ mod tests {
             cache_ttl_seconds: 300,
             rate_limit_rps: 5.0,
             rate_limit_burst: 10.0,
+            max_concurrent_llm_requests: 32,
+            cache_max_entries: 10000,
         };
 
         let server = Server::new(config)?;
@@ -681,5 +717,75 @@ mod tests {
             bytes.len()
         );
         assert_eq!(truncated.metadata.id, 42, "query id must be preserved");
+    }
+
+    fn test_handler_with_limit(limit: usize) -> LlmDnsHandler {
+        let llm_client = Arc::new(
+            LlmClient::new(
+                "key".to_string(),
+                vec!["model".to_string()],
+                "Test system prompt".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+        );
+        LlmDnsHandler::new(
+            llm_client,
+            Arc::new(Chunker::new()),
+            Arc::new(DnsHandler::new()),
+            Arc::new(DnsCache::new(Duration::from_secs(300))),
+        )
+        .with_max_concurrent_llm_requests(limit)
+    }
+
+    #[tokio::test]
+    async fn test_query_is_shed_when_llm_concurrency_exhausted() {
+        // With every permit held, a further query must be refused *before* the
+        // outbound call - so this asserts the shed without touching the network.
+        let handler = test_handler_with_limit(1);
+        let sem = handler.llm_permits.clone().expect("limit should be active");
+        let _held = sem.try_acquire_owned().expect("first permit available");
+
+        let name = Name::from_utf8("what.is.rust.").unwrap();
+        let err = handler
+            .process_query(&name)
+            .await
+            .expect_err("query should be shed while permits are exhausted");
+
+        assert!(
+            err.to_string().contains("concurrency limit"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_permit_is_released_after_query() {
+        // A shed query must not leak its permit, or the server would wedge shut
+        // after the first burst.
+        let handler = test_handler_with_limit(1);
+        let sem = handler.llm_permits.clone().expect("limit should be active");
+
+        {
+            let _held = sem.clone().try_acquire_owned().unwrap();
+            let name = Name::from_utf8("first.query.").unwrap();
+            assert!(handler.process_query(&name).await.is_err());
+        }
+
+        assert_eq!(
+            sem.available_permits(),
+            1,
+            "permit was not returned after the shed query"
+        );
+    }
+
+    #[test]
+    fn test_zero_limit_disables_llm_concurrency_cap() {
+        assert!(test_handler_with_limit(0).llm_permits.is_none());
+        assert!(test_handler_with_limit(4).llm_permits.is_some());
     }
 }

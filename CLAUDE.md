@@ -129,6 +129,8 @@ Optional:
 - `DNS_PORT` or `PORT` - DNS listening port (default: 53, `PORT` takes precedence)
 - `DNS_ADDRESS` or `HOST` - Bind address (default: 0.0.0.0, `HOST` takes precedence)
 - `RUST_LOG` - Logging level: debug, info, warn, error (default: info)
+- `MAX_CONCURRENT_LLM_REQUESTS` - Global ceiling on in-flight LLM calls (default: 32, 0 disables). Excess queries are shed with SERVFAIL rather than queued, since per-IP rate limiting cannot bound spend on spoofable UDP sources.
+- `CACHE_MAX_ENTRIES` - Ceiling on cached responses (default: 10000, 0 for unbounded)
 
 ### Local Development Setup
 
