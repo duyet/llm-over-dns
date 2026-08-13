@@ -87,7 +87,9 @@ jobs:
           docker images test-image --format "Size: {{.Size}}"
 
       - name: Scan Docker image for vulnerabilities
-        uses: aquasecurity/trivy-action@master
+        # Pinned to a release tag: @master would run whatever upstream pushes,
+        # giving a third party arbitrary code execution in this workflow.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: test-image
           format: 'sarif'
