@@ -52,7 +52,7 @@ assert_matches = "1.5"
 pretty_assertions = "1.4"
 
 # Serial test execution for tests with shared state
-serial_test = "3.0"
+serial_test = "4.0"
 
 # Async utilities for concurrent tests
 futures = "0.3"
