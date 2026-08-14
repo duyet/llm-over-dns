@@ -8,13 +8,16 @@
 .env
 .env.local
 
-# IDE
+# IDE / local agents
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 .helix/
+.antigravitycli/
+.agent-loop/
+.claude/
 
 # OS
 .DS_Store
