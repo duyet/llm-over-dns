@@ -1,469 +1,171 @@
-# 🤖 LLM over DNS
+# LLM over DNS
 
-> **Query large language models using DNS. No HTTP, no complexity—just `dig`.**
+Query a large language model with `dig`. No HTTP client, no special SDK — just DNS TXT.
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://github.com/duyet/llm-over-dns/workflows/CI/badge.svg)](https://github.com/duyet/llm-over-dns/actions)
-[![Coverage](https://img.shields.io/badge/coverage-62%25-yellow)](#-for-developers)
+[![CI](https://github.com/duyet/llm-over-dns/workflows/CI/badge.svg)](https://github.com/duyet/llm-over-dns/actions)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://ghcr.io/duyet/llm-over-dns)
 
-A high-performance DNS server that responds to TXT queries with AI-generated answers via **AnyRouter (Recommended)** or **OpenRouter**. Ask AI anything using standard DNS tools—no special clients required.
-
----
-
-## 🎯 Overview
-
-LLM over DNS transforms DNS queries into AI conversations. Send questions using `dig`, `nslookup`, or any DNS client, and receive intelligent responses as TXT records.
+A Rust DNS server that treats the query name as a prompt and answers with TXT records via [AnyRouter](https://anyrouter.dev) (recommended) or [OpenRouter](https://openrouter.ai).
 
 ```bash
 dig @localhost -p 5353 'explain quantum computing in simple terms' TXT +short
-# "Quantum computing uses quantum mechanics to process information. Unlike classical..."
+# "Quantum computing uses quantum mechanics to process information..."
 ```
 
-## 🌐 Live Demo
+## Live demo
 
-You can test this project live right now from your own terminal without installing anything! We have a publicly deployed server at `178.18.253.241` mapped to **`llm-over-dns.duyet.net`**.
+Public server: `llm-over-dns.duyet.net` (`178.18.253.241`).
 
-### Option A: Query the Live Server Directly (Standard)
+Direct query:
+
 ```bash
 dig +short TXT "What is 15 + 30?" @llm-over-dns.duyet.net
 # "15 + 30 = 45"
 ```
 
-### Option B: Query via Global NS Delegation (Magical!)
-Because the subdomain is delegated globally via `NS` records, you can query the LLM from **any computer on earth** directly through standard internet DNS, without specifying the `@` target server:
+Via NS delegation (no `@` server needed):
+
 ```bash
 dig +short TXT "hello.llm-over-dns.duyet.net"
-# "Hello! How can I help you today?"
 ```
 
-### ✨ Key Features
+The QNAME is the prompt. There is no subdomain parsing.
 
-- **🌐 Universal Protocol** - DNS works everywhere, on every device
-- **🔓 Firewall-Friendly** - DNS (port 53/5353) rarely blocked, even in restricted networks
-- **⚡ High Performance** - Async Rust architecture, production-ready
-- **🔄 Auto Fallback** - Multiple AI models with automatic failover
-- **🆓 Flexible Providers** - Powered by **AnyRouter (Recommended)** or OpenRouter's API models
-- **🐳 Docker Ready** - Multi-arch images (amd64, arm64)
-- **✅ Tested & Automated** - Unit, integration and doc tests enforced by CI/CD
-- **📦 Cross-Platform** - Binaries for Linux, macOS, Windows
+## Why
 
-### 🎪 Why This Exists
+- DNS is available on almost every device and network, including many that block HTTP.
+- The client can be `dig`, `nslookup`, or any resolver — no extra libraries.
+- Useful for demos, restricted networks, IoT, and protocol experiments.
 
-- **Educational**: Demonstrates creative protocol usage and DNS capabilities
-- **Practical**: Enables AI access in HTTP-restricted environments
-- **Showcase**: Real-world example of AI-assisted development
-- **Fun**: Because using DNS for LLM queries is delightfully unconventional
+Not a replacement for a normal chat API. DNS is unencrypted; do not send secrets.
 
----
-
-## 🚀 Quick Start (2 minutes)
-
-### 1. Start the DNS Server
+## Quick start
 
 ```bash
-# 1. Clone and navigate to the project
-git clone https://github.com/duyet/llm-over-dns.git
+git clone https://github.com/duet/llm-over-dns.git
 cd llm-over-dns
 
-# 2. Configure your API key
-# For AnyRouter (Recommended):
+# AnyRouter (recommended): https://anyrouter.dev
 echo "ANYROUTER_API_KEY=your_key_here" > .env
-# For OpenRouter:
-# echo "OPENROUTER_API_KEY=your_key_here" > .env
+# or OpenRouter: OPENROUTER_API_KEY=...
 
-# 3. Run the DNS server on a non-privileged port
 DNS_PORT=5454 cargo run --release
 ```
 
-**Expected Startup Log:**
-```text
-=== Configuration ===
-Provider: AnyRouter API (https://anyrouter.dev)
-API Key: sk-ar-v1...*** (masked)
-Models (with fallback): ["google/gemini-2.5-flash-lite", "meta/llama-3.2-3b-instruct"]
-DNS Server: 0.0.0.0:5454
-
-=== Server Ready ===
-Press Ctrl+C to stop
-Server task starting...
-DNS server listening on 0.0.0.0:5454
-Waiting for DNS queries...
-```
-
-### 2. Send a Test Prompt
-
-In another terminal window, send your prompt as a standard DNS `TXT` query:
+In another terminal:
 
 ```bash
-dig @localhost -p 5454 'what is rust programming in one sentence' TXT +time=30 +short
+dig @localhost -p 5454 'what is rust in one sentence' TXT +time=30 +short
 ```
 
-**Expected Response Output:**
-```text
-"Rust is a systems programming language focused on safety, speed, and concurrency, designed to prevent memory errors and data races at compile time."
-```
+Port `53` needs root. Use `5353` or `5454` for local development.
 
----
-
-## 💡 How It Works
+## How it works
 
 ```mermaid
 graph TD
-    Client["DNS Client (e.g., dig)"] -->|1. TXT Query| Server["DNS Server (Rust + Tokio)"]
-    Server -->|2. HTTP Request| Gateway["LLM Gateway (OpenRouter/AnyRouter)"]
-    Gateway -->|3. Inference| LLM["LLM (e.g., Llama, Nemotron)"]
-    LLM -->|4. Response text| Gateway
-    Gateway -->|5. HTTP Response| Server
-    Server -->|6. Chunked TXT Records| Client
+    Client["DNS client (dig)"] -->|TXT query| Server["llm-over-dns (Rust + Tokio)"]
+    Server -->|HTTP| Gateway["AnyRouter or OpenRouter"]
+    Gateway --> LLM["Model"]
+    LLM --> Gateway
+    Gateway --> Server
+    Server -->|chunked TXT| Client
 ```
 
-1. **DNS Query**: You send a question as a DNS TXT query
-2. **LLM Processing**: Query sent directly to LLM via **AnyRouter** or OpenRouter (no domain parsing)
-3. **Response Chunking**: Long responses split into 255-char TXT records (DNS limit)
-4. **Model Fallback**: Automatic failover to backup models if primary fails
+1. The query name is sent to the LLM as the user prompt.
+2. Long answers are split into 255-byte TXT strings (DNS limit).
+3. If a model fails, the next model in the fallback list is tried.
+4. Excess in-flight LLM calls are shed with SERVFAIL (`MAX_CONCURRENT_LLM_REQUESTS`).
 
-**Architecture Highlights:**
-- Async Rust using Tokio runtime for high concurrency
-- Stateless DNS handler for thread-safe request processing
-- Automatic model fallback across configurable LLM list
-- Graceful shutdown with signal handling
-- Structured logging with `tracing`
+Details: [docs/architecture.md](docs/architecture.md).
 
-For detailed architecture, see [architecture.md](docs/architecture.md).
+## Configuration
 
----
+Precedence: environment → `.env.local` (gitignored) → `.env` → defaults.
 
-## 🎨 Use Cases
+| Variable | Default | Notes |
+|---|---|---|
+| `ANYROUTER_API_KEY` | — | Preferred provider (`sk-ar-…`) |
+| `OPENROUTER_API_KEY` | — | Used if AnyRouter key is unset |
+| `ANYROUTER_MODEL` | `google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct` | Comma-separated fallbacks |
+| `OPENROUTER_MODEL` | `nvidia/nemotron-nano-9b-v2:free,meituan/longcat-flash-chat:free,minimax/minimax-m2:free` | Comma-separated fallbacks |
+| `DNS_PORT` / `PORT` | `53` | `PORT` wins if both set |
+| `DNS_ADDRESS` / `HOST` | `0.0.0.0` | `HOST` wins if both set |
+| `RUST_LOG` | `info` | `debug`, `info`, `warn`, `error` |
+| `MAX_CONCURRENT_LLM_REQUESTS` | `32` | `0` disables the cap |
+| `CACHE_MAX_ENTRIES` | `10000` | `0` = unbounded |
 
-### 1. Command Line AI Assistant
-```bash
-dig @localhost 'capital of france' TXT +short
-dig @localhost 'rust async example' TXT +short
-dig @localhost 'what is 15% of 240' TXT +short
-```
+Full list: [docs/configuration.md](docs/configuration.md).
 
-### 2. Restricted Network Environments
-```bash
-# Access AI when HTTP/HTTPS is blocked but DNS works
-dig @ai.example.com 'troubleshoot network issue' TXT
-dig @ai.example.com 'ssh connection refused help' TXT
-```
-
-### 3. IoT & Embedded Devices
-```bash
-# Minimal protocol - only DNS client needed (no HTTP libs)
-dig @ai-server.local 'analyze sensor data: 23C 45% humidity' TXT
-```
-
-### 4. Educational Demonstrations
-```bash
-# Show students creative protocol usage
-dig @localhost 'explain DNS in simple terms' TXT
-dig @localhost 'how does DNS tunneling work' TXT
-```
-
-### 5. Security Research & CTF
-```bash
-# Demonstrate DNS tunneling techniques (educational/authorized contexts)
-dig @localhost 'explain data exfiltration via DNS' TXT
-```
-
----
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create `.env` or `.env.local` (higher priority):
-
-```bash
-# Required (at least one)
-ANYROUTER_API_KEY=your_key_here   # (Recommended) Get key: https://anyrouter.dev (starts with sk-ar-)
-# OR
-OPENROUTER_API_KEY=your_key_here  # Get key: https://openrouter.ai
-
-# Optional
-ANYROUTER_MODEL=google/gemini-2.5-flash-lite,meta/llama-3.2-3b-instruct  # Comma-separated for AnyRouter fallback
-OPENROUTER_MODEL=nvidia/nemotron-nano-12b-v2-vl:free                    # Comma-separated for OpenRouter fallback
-DNS_PORT=5353                      # Default: 53 (requires sudo), use 5353 for dev
-DNS_ADDRESS=0.0.0.0                # Default: 0.0.0.0 (all interfaces)
-RUST_LOG=info                      # debug | info | warn | error
-```
-
-### Configuration Priority
-
-1. **Environment variables** (highest)
-2. `.env.local` (gitignored, for local overrides)
-3. `.env` (team-shared defaults)
-4. Hard-coded defaults (lowest)
-
-See [docs/configuration.md](docs/configuration.md) for details.
-
----
-
-## 🐳 Docker Deployment
-
-### Docker Run
+## Docker
 
 ```bash
 docker run -d \
   --name llm-dns \
   --restart unless-stopped \
   -p 5353:53/udp \
-  -e OPENROUTER_API_KEY=your_key \
-  ghcr.io/duyet/llm-over-dns:latest
+  -e ANYROUTER_API_KEY=your_key \
+  ghcr.io/duet/llm-over-dns:latest
 ```
 
-### Docker Compose
+Or `docker-compose up -d` with the same env vars. Images are multi-arch (`amd64`, `arm64`).
 
-```yaml
-version: '3.8'
-services:
-  llm-dns:
-    image: ghcr.io/duyet/llm-over-dns:latest
-    ports:
-      - "5353:53/udp"
-    environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - RUST_LOG=info
-    restart: unless-stopped
-```
+Production notes and NS delegation: [docs/deployment-docker.md](docs/deployment-docker.md).
+
+## Examples
 
 ```bash
-# Start service
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop service
-docker-compose down
-```
-
-### Production Deployment
-
-```bash
-# Run on privileged port 53
-docker run -d \
-  --name llm-dns-prod \
-  --restart unless-stopped \
-  -p 53:53/udp \
-  -e OPENROUTER_API_KEY=$YOUR_KEY \
-  -e RUST_LOG=warn \
-  ghcr.io/duyet/llm-over-dns:latest
-
-# Configure DNS delegation (example)
-# 1. Point ns.yourdomain.com to your server IP
-# 2. Create NS record: ai.yourdomain.com → ns.yourdomain.com
-# 3. Query: dig @ai.yourdomain.com 'hello' TXT
-```
-
-See [docs/deployment-docker.md](docs/deployment-docker.md) for advanced deployment.
-
----
-
-## 🎮 Example Queries
-
-```bash
-# Get jokes
 dig @localhost -p 5353 'tell me a programming joke' TXT +short
-
-# Quick facts
-dig @localhost -p 5353 'speed of light in km/s' TXT +short
-
-# Code snippets
 dig @localhost -p 5353 'fibonacci in python' TXT +short
-
-# Explanations
-dig @localhost -p 5353 'explain recursion simply' TXT +short
-
-# Translations
 dig @localhost -p 5353 'hello in japanese' TXT +short
-
-# Math help
-dig @localhost -p 5353 'pythagorean theorem formula' TXT +short
-
-# Long responses (multiple TXT records)
-dig @localhost -p 5353 'explain machine learning' TXT
-
-# Increase timeout for complex queries
-dig +timeout=10 @localhost -p 5353 'explain quantum physics' TXT +short
+dig +timeout=10 @localhost -p 5353 'explain machine learning' TXT
 ```
 
----
+Complex answers take longer; raise `+timeout` if `dig` gives up first.
 
-## 🛠️ Development
+## Development
 
-### Prerequisites
-
-- Rust 1.70+ (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-- AnyRouter API key (Recommended, get key at [anyrouter.dev](https://anyrouter.dev)) or OpenRouter API key (free at [openrouter.ai](https://openrouter.ai))
-
-### Build & Test
+Needs Rust 1.70+ and an AnyRouter or OpenRouter API key.
 
 ```bash
-# Build
-cargo build
-cargo build --release  # Optimized
-
-# Run tests
+cargo build --release
 cargo test
-cargo test -- --nocapture  # With output
-
-# Format & lint
 cargo fmt
-cargo clippy -- -D warnings  # Strict mode (CI standard)
-
-# Run server
-DNS_PORT=5353 RUST_LOG=debug cargo run
-
-# Generate coverage report
-cargo install cargo-tarpaulin
-cargo tarpaulin --out Html --output-dir coverage
-```
-
-### Key Dependencies
-
-- **hickory-dns** (0.25.2) - DNS protocol implementation
-- **tokio** (1.35) - Async runtime
-- **reqwest** (0.11) - HTTP client for OpenRouter
-- **serde/serde_json** (1.0) - JSON serialization
-- **anyhow/thiserror** (1.0) - Error handling
-- **tracing** (0.1) - Structured logging
-
-See [CLAUDE.md](CLAUDE.md) for complete development guide.
-
----
-
-## 🤔 FAQ
-
-**Q: Is this production-ready?**
-A: It has CI/CD, security scanning, Docker support and a test suite covering ~63% of lines. Rate limiting is built in - review the limits before exposing it publicly.
-
-**Q: What if DNS times out?**
-A: Increase timeout: `dig +timeout=10 @localhost 'complex query' TXT`
-
-**Q: Does this work with local LLMs?**
-A: Currently OpenRouter only. Local LLM support (Ollama, etc.) is planned.
-
-**Q: How fast is it?**
-A: Simple queries: 0.5-2s. Complex: 2-10s. Depends on model, network, and query complexity.
-
-**Q: Are there rate limits?**
-A: OpenRouter free tier has fair-use limits. Sufficient for personal use. Paid tiers available.
-
-**Q: Can I use custom models?**
-A: Yes! Set `OPENROUTER_MODEL` to comma-separated list for automatic fallback.
-
-**Q: How does chunking work?**
-A: DNS TXT records have 255-char limit. Long responses are split across multiple records, preserving order.
-
-**Q: Is this secure?**
-A: DNS is unencrypted by design. Don't send sensitive data. Consider DoT/DoH in production.
-
----
-
-## 📊 Performance & Testing
-
-### Test Coverage: ~63%
-
-Comprehensive test suite with unit and integration tests:
-- Config loading and validation
-- DNS query parsing and handling
-- LLM client with mock responses
-- Text chunking/dechunking
-- Server lifecycle management
-
-### CI/CD Pipeline
-
-Three GitHub Actions workflows:
-
-1. **CI** (`ci.yml`) - Format, lint, test, coverage, security audit
-2. **Docker** (`docker.yml`) - Multi-arch builds (amd64, arm64), vulnerability scanning
-3. **Release** (`release.yml`) - Cross-platform binaries for 6 platforms
-
-All checks must pass before merge. See [.github/workflows/](.github/workflows/) for details.
-
-### Benchmarks
-
-| Query Type | Response Time | Notes |
-|------------|--------------|-------|
-| Simple facts | 0.5-1s | "capital of france" |
-| Code snippets | 1-3s | "fibonacci python" |
-| Explanations | 2-5s | "explain DNS" |
-| Complex topics | 5-10s | "quantum computing" |
-
-*Performance varies by model, network latency, and OpenRouter load.*
-
-## 📚 Documentation
-
-Comprehensive guides in the `docs/` directory:
-
-- **[getting_started.md](docs/getting_started.md)** - Detailed setup guide
-- **[architecture.md](docs/architecture.md)** - System design and internals
-- **[configuration.md](docs/configuration.md)** - Environment and config options
-- **[deployment-docker.md](docs/deployment-docker.md)** - Docker and production deployment
-- **[api.md](docs/api.md)** - Rust API documentation
-- **[contributing.md](docs/contributing.md)** - Development guidelines
-- **[CLAUDE.md](CLAUDE.md)** - Instructions for Claude Code (meta!)
-
-Generate Rust API docs: `cargo doc --open`
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Built by AI, improved by humans. 😊
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing`)
-3. Run tests: `cargo test`
-4. Lint code: `cargo clippy -- -D warnings`
-5. Format: `cargo fmt`
-6. Submit PR
-
-See [contributing.md](docs/contributing.md) for guidelines.
-
-### Development Workflow
-
-```bash
-# Create feature branch
-git checkout -b feature/my-feature
-
-# Make changes, run tests
-cargo test
 cargo clippy -- -D warnings
-cargo fmt
-
-# Commit and push
-git commit -m "feat: add amazing feature"
-git push origin feature/my-feature
+DNS_PORT=5353 RUST_LOG=debug cargo run
 ```
 
----
+CI runs format, clippy, tests, coverage (≥60%), and `cargo audit`. Coverage: `cargo tarpaulin --out Html --output-dir coverage`.
 
-## 📜 License
+Stack: hickory-dns 0.26, Tokio 1.35, reqwest 0.13, tracing.
 
-MIT License - See [LICENSE](LICENSE) for details.
+See [CLAUDE.md](CLAUDE.md) and [docs/contributing.md](docs/contributing.md).
 
-Free to use, modify, and distribute.
+## FAQ
 
----
+**Is this production-ready?** It has CI, Docker, rate limiting, and concurrency caps. Review limits before exposing port 53.
 
-## 🔗 Links
+**Local models?** Not yet. Planned via a compatible OpenAI-style endpoint (Ollama, etc.).
 
-- **GitHub**: [github.com/duyet/llm-over-dns](https://github.com/duyet/llm-over-dns)
-- **Docker Images**: [ghcr.io/duyet/llm-over-dns](https://ghcr.io/duyet/llm-over-dns)
-- **Author**: [duyet.net](https://duyet.net)
-- **AnyRouter**: [anyrouter.dev](https://anyrouter.dev) (Recommended)
-- **OpenRouter**: [openrouter.ai](https://openrouter.ai)
+**How fast?** Roughly 0.5–2s for short answers, 2–10s for longer ones — mostly the model, not DNS.
 
----
+**Secure?** UDP DNS is plaintext. Do not put credentials in queries. DoT/DoH would be a separate layer.
 
-## 🌟 Star This Project
+## Docs
 
-If you find this interesting, give it a ⭐! It helps others discover this creative approach to AI access.
+- [Getting started](docs/getting_started.md)
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [Docker / deploy](docs/deployment-docker.md)
+- [API](docs/api.md)
+- [Contributing](docs/contributing.md)
 
----
+`cargo doc --open` for rustdoc.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+[github.com/duet/llm-over-dns](https://github.com/duet/llm-over-dns) · [ghcr.io/duet/llm-over-dns](https://ghcr.io/duet/llm-over-dns) · [duyet.net](https://duyet.net)
