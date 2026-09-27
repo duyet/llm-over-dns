@@ -20,6 +20,7 @@ jobs:
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -38,6 +39,7 @@ jobs:
   clippy:
     name: Clippy Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -56,6 +58,7 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -72,6 +75,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         rust: [stable, beta]
@@ -88,20 +92,33 @@ jobs:
           cache-all-crates: true
 
       - name: Run tests
-        run: cargo test --all-features --verbose
+        # Dummy key, not the real one. test_anyrouter_smoke is skipped here and
+        # run on its own below, so no other test runs with a live credential:
+        # otherwise any failed assertion that prints a config value prints the
+        # secret into a public CI log.
+        run: cargo test --all-features --verbose -- --skip test_anyrouter_smoke
         env:
           RUST_BACKTRACE: full
+          ANYROUTER_API_KEY: sk-ar-dummy-ci-not-a-real-key
+
+      - name: Run live AnyRouter smoke test
+        # The one test that talks to a real API with a real key. Kept separate so
+        # the credential is scoped to it instead of the whole suite. The filter is
+        # the bare test name, so it still matches if the test moves module.
+        run: cargo test --lib test_anyrouter_smoke
+        env:
           ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
 
       - name: Run doc tests
         run: cargo test --doc --all-features
         env:
-          ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
+          ANYROUTER_API_KEY: sk-ar-dummy-ci-not-a-real-key
 
   # Code coverage
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
@@ -119,9 +136,11 @@ jobs:
           tool: cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 60
+        # Args after `--` reach the test binaries, so the live smoke test is
+        # excluded here exactly as in the test job and the run needs no real key.
+        run: cargo tarpaulin --out Xml --all-features --timeout 120 --exclude-files tests/* --fail-under 60 -- --skip test_anyrouter_smoke
         env:
-          ANYROUTER_API_KEY: ${{ secrets.ANYROUTER_API_KEY }}
+          ANYROUTER_API_KEY: sk-ar-dummy-ci-not-a-real-key
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -166,6 +185,7 @@ jobs:
   all-checks-pass:
     name: All Checks Pass
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [fmt, clippy, audit, test, coverage]
     if: always()
     steps:
