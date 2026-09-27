@@ -13,22 +13,29 @@ services:
     network_mode: host
 
     # Environment variables configuration
+    #
+    # Provider credentials and model lists use the bare list form on purpose:
+    # compose omits an entry whose variable is unset instead of passing it empty.
+    # The application reads presence, not non-emptiness — a blank ANYROUTER_API_KEY
+    # selects AnyRouter with no credentials (401 on every call), and a blank model
+    # list aborts startup. Leaving them unset also keeps the application's own
+    # multi-model fallback list in charge.
     environment:
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
-      ANYROUTER_API_KEY: ${ANYROUTER_API_KEY:-}
-      ANYROUTER_MODEL: ${ANYROUTER_MODEL:-}
-      CACHE_TTL_SEC: ${CACHE_TTL_SEC:-300}
-      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-5.0}
-      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10.0}
+      - OPENROUTER_API_KEY
+      - OPENROUTER_MODEL
+      - ANYROUTER_API_KEY
+      - ANYROUTER_MODEL
+      - CACHE_TTL_SEC=${CACHE_TTL_SEC:-300}
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-5.0}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-10.0}
 
       # DNS Server listens on 5353 (non-privileged).
       # Host iptables routes UDP :53 -> :5353.
-      DNS_ADDRESS: ${DNS_ADDRESS:-0.0.0.0}
-      DNS_PORT: ${DNS_PORT:-5353}
+      - DNS_ADDRESS=${DNS_ADDRESS:-0.0.0.0}
+      - DNS_PORT=${DNS_PORT:-5353}
 
       # Logging level (trace, debug, info, warn, error)
-      RUST_LOG: ${RUST_LOG:-info}
+      - RUST_LOG=${RUST_LOG:-info}
 
     # Restart policy
     restart: unless-stopped
