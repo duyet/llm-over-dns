@@ -9,6 +9,13 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+# A new push to master supersedes the build already running for that ref. Tag
+# pushes are left alone: they publish an immutable version image, so a stale run
+# must not be cancelled half-way.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -17,6 +24,7 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -71,8 +79,13 @@ jobs:
   docker-test:
     name: Test Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: build-and-push
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      # The SARIF upload below fails without this; it is scoped to this job.
+      security-events: write
 
     steps:
       - name: Checkout repository
@@ -82,19 +95,46 @@ jobs:
         run: docker build -t test-image .
 
       - name: Test Docker image
+        # The binary takes no arguments, so starting it proved nothing: with no
+        # key config load fails, and the default port 53 cannot be bound by the
+        # non-root user in the image. Assert on a real query against the port the
+        # image actually serves (5353/udp) so this step can fail.
         run: |
-          docker run --rm test-image --version || true
+          docker run -d --name test-llm \
+            -e OPENROUTER_API_KEY=ci-dummy-key \
+            -e DNS_PORT=5353 \
+            -p 5353:5353/udp \
+            test-image
+          # The dummy key makes the upstream call fail, so the server answers
+          # SERVFAIL. A reply with any status proves it is serving DNS; a
+          # timeout means it is not, and that fails the step.
+          for _ in $(seq 1 6); do
+            if dig @127.0.0.1 -p 5353 'ci health check' TXT +timeout=10 +tries=1 > answer.txt 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          cat answer.txt
+          if ! grep -Eq 'status: (NOERROR|SERVFAIL)' answer.txt; then
+            echo "❌ No DNS reply from the container on 127.0.0.1:5353"
+            docker logs test-llm
+            exit 1
+          fi
+          docker rm -f test-llm
           docker images test-image --format "Size: {{.Size}}"
 
       - name: Scan Docker image for vulnerabilities
         # Pinned to a release tag: @master would run whatever upstream pushes,
         # giving a third party arbitrary code execution in this workflow.
+        # exit-code makes HIGH/CRITICAL findings fail the build; without it the
+        # scan reports and never blocks.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: test-image
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          exit-code: '1'
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
