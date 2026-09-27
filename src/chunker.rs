@@ -63,13 +63,9 @@ impl Chunker {
     /// - Text <= max_chunk_size returns single-element vector
     /// - Text > max_chunk_size is split into multiple chunks
     /// - Text > max_total_size is truncated to max_total_size
+    /// - Text that truncates away entirely returns an empty vector
     /// - UTF-8 character boundaries are respected (no mid-character splits)
     pub fn chunk_text(&self, text: &str) -> Vec<String> {
-        // Handle empty string
-        if text.is_empty() {
-            return Vec::new();
-        }
-
         // If text fits in total size limit, proceed with chunking
         let text_to_chunk = if text.len() > self.max_total_size {
             // Truncate to max_total_size while respecting UTF-8 boundaries
@@ -77,6 +73,16 @@ impl Chunker {
         } else {
             text
         };
+
+        // Nothing to emit: either the input was empty, or the total budget was too
+        // small to hold its first character and the boundary walk fell all the way
+        // back to byte 0. This must be tested against the truncated slice — the
+        // pre-truncation input can be non-empty and still leave nothing behind. A
+        // single empty chunk would serialise to a zero-length TXT record, which a
+        // client reads as a blank answer line rather than NODATA.
+        if text_to_chunk.is_empty() {
+            return Vec::new();
+        }
 
         // If text fits in single chunk, return it
         if text_to_chunk.len() <= self.max_chunk_size {
@@ -399,6 +405,42 @@ mod tests {
             3,
             "each 4-byte char should occupy its own chunk"
         );
+    }
+
+    #[test]
+    fn test_truncation_to_zero_bytes_yields_no_chunks() {
+        // Regression: the empty-input check ran against the pre-truncation input,
+        // so a total budget that cannot hold even the first character slipped
+        // through and took the single-chunk fast path with an empty string. A
+        // zero-length TXT record reads to the client as a blank answer line
+        // rather than NODATA, so truncation to nothing must produce nothing.
+        let cases = [
+            (0, "a"),
+            (1, "🎉"),  // 4-byte char against a 1-byte budget
+            (2, "🎉"),  // budget lands mid-character
+            (3, "🎉a"), // budget lands mid-character, after a whole one
+        ];
+
+        for (max_total_size, text) in cases {
+            let chunker = Chunker::with_sizes(250, max_total_size);
+            let chunks = chunker.chunk_text(text);
+
+            assert!(
+                chunks.is_empty(),
+                "total budget {max_total_size} over {text:?} produced {chunks:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_truncation_partway_into_multibyte_char_keeps_remainder() {
+        // The budget lands inside a leading multi-byte character. The boundary
+        // walk must fall back to the last valid boundary *before* it, and keep
+        // whatever text survives.
+        let chunker = Chunker::with_sizes(250, 3);
+        let chunks = chunker.chunk_text("a🎉");
+
+        assert_eq!(chunks, vec!["a"]);
     }
 
     #[test]
