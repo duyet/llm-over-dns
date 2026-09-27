@@ -16,6 +16,14 @@
 //! - `CACHE_MAX_ENTRIES` (optional): Ceiling on cached responses, defaults to
 //!   10000. Set to 0 for an unbounded cache.
 //!
+//! # Validation
+//!
+//! Every value is validated at startup. A variable that is present but cannot be
+//! parsed, falls outside its documented range, or holds an unusable API key is a
+//! hard error rather than a silent fallback to a default. A config that loads is
+//! a config the server can actually serve; the alternative is a server that
+//! binds, logs a healthy startup, and then answers nothing.
+//!
 //! # Examples
 //!
 //! ```no_run
@@ -33,6 +41,137 @@
 
 use anyhow::{Context, Result};
 use std::env;
+use std::str::FromStr;
+
+/// Stand-in values shipped in `.env.example`. Either one means the file was
+/// copied but never edited, which must not be mistaken for a real credential.
+const API_KEY_PLACEHOLDERS: &[&str] = &["your_api_key_here", "sk-ar-v1-..."];
+
+/// Reads the first of `names` that is present in the environment.
+fn first_env_var(names: &[&str]) -> Option<String> {
+    names.iter().find_map(|name| env::var(name).ok())
+}
+
+/// Parses a numeric environment variable, applying `default` only when every
+/// name in `names` is absent.
+///
+/// A present-but-unparseable value is a startup error, not a silent fallback.
+/// `MAX_CONCURRENT_LLM_REQUESTS=1O` (letter O, not a zero) previously became 32,
+/// so an operator who believed they had capped concurrent spend was running
+/// three times over, with nothing in the logs to say the cap was never applied.
+fn parse_env<T>(names: &[&str], default: T) -> Result<T>
+where
+    T: FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    match first_env_var(names) {
+        Some(raw) => raw
+            .parse()
+            .with_context(|| format!("Invalid {} value: {raw:?}", names.join("/"))),
+        None => Ok(default),
+    }
+}
+
+/// Parses an optional float environment variable and enforces its documented
+/// range.
+///
+/// `Ok(None)` means the variable is absent, which means "use the model default".
+/// A present value that does not parse, or that falls outside `min..=max`, is a
+/// startup error: `TEMPERATURE=2.5` makes the provider reject every request, so
+/// the server SERVFAILs queries it could otherwise have answered.
+fn parse_optional_f32_in_range(name: &str, min: f32, max: f32) -> Result<Option<f32>> {
+    let Some(raw) = env::var(name).ok() else {
+        return Ok(None);
+    };
+
+    let value: f32 = raw
+        .parse()
+        .with_context(|| format!("Invalid {name} value: {raw:?}"))?;
+
+    // The range test alone also rejects `NaN` and the infinities, since every
+    // comparison against a non-finite value is false.
+    anyhow::ensure!(
+        (min..=max).contains(&value),
+        "{name} must be between {min} and {max} (got {value})"
+    );
+
+    Ok(Some(value))
+}
+
+/// Parses an optional unsigned environment variable.
+///
+/// `Ok(None)` means the variable is absent. A present value that does not parse
+/// is a startup error rather than a silent "use the model default".
+fn parse_optional_u32(name: &str) -> Result<Option<u32>> {
+    let Some(raw) = env::var(name).ok() else {
+        return Ok(None);
+    };
+
+    raw.parse()
+        .with_context(|| format!("Invalid {name} value: {raw:?}"))
+        .map(Some)
+}
+
+/// As [`parse_optional_u32`], but rejects values below `min`.
+///
+/// `MAX_TOKENS=0` asks the provider for a response that cannot contain any
+/// tokens at all, which it rejects outright rather than truncating. That is a
+/// total outage rather than a tuning knob, so it fails at startup instead of
+/// being forwarded on every request.
+fn parse_optional_u32_min(name: &str, min: u32) -> Result<Option<u32>> {
+    let Some(value) = parse_optional_u32(name)? else {
+        return Ok(None);
+    };
+
+    anyhow::ensure!(value >= min, "{name} must be at least {min} (got {value})");
+
+    Ok(Some(value))
+}
+
+/// Rejects rate-limiting values that are negative or non-finite.
+///
+/// `NaN` parses cleanly as an `f64`, and `IpRateLimiter` then behaves as though
+/// limiting had been switched off entirely, so a typo silently removes the only
+/// per-IP protection the server has.
+fn require_non_negative_finite(name: &str, value: f64) -> Result<f64> {
+    anyhow::ensure!(
+        value.is_finite() && value >= 0.0,
+        "{name} must be a finite value of 0 (which disables the limit) or greater (got {value})"
+    );
+
+    Ok(value)
+}
+
+/// Validates a provider API key before the server binds, returning it trimmed.
+///
+/// Presence alone is not enough to prove a key works. `.env.example` ships
+/// `OPENROUTER_API_KEY=your_api_key_here`, so a user who copied it without
+/// editing got a server that bound, logged "LLM client ready", and then
+/// SERVFAILed every query with only a per-query `warn!` that reads like an
+/// upstream outage. An interior-whitespace key (a half-pasted credential) or
+/// an unwrapped placeholder fails the same way, so both are startup errors.
+///
+/// A key that is *entirely* blank is different: it carries no intent, and
+/// `install.sh` and `docker-compose.yml` used to write an empty
+/// `ANYROUTER_API_KEY=` into every deployment. Treating that as "AnyRouter
+/// selected" is the original bug, so blank falls through to the other
+/// provider rather than erroring — an existing deployment that has the empty
+/// line keeps working, and stops 401ing.
+fn validate_api_key(name: &str, key: String) -> Result<String> {
+    let key = key.trim();
+
+    anyhow::ensure!(
+        !key.contains(char::is_whitespace),
+        "{name} contains whitespace, which no provider key does; it looks half-pasted"
+    );
+
+    anyhow::ensure!(
+        !API_KEY_PLACEHOLDERS.contains(&key),
+        "{name} still holds the .env.example placeholder; replace it with a real {name}"
+    );
+
+    Ok(key.to_string())
+}
 
 /// Configuration for the LLM over DNS server.
 ///
@@ -90,7 +229,7 @@ pub struct Config {
     /// spoofable, so rotating sources yields unlimited per-IP allowance. This is
     /// the global ceiling on concurrent spend and in-flight tasks.
     pub max_concurrent_llm_requests: usize,
-    /// Maximum cached responses retained (default: 10000, set to 0 to disable)
+    /// Maximum cached responses retained (default: 10000, set to 0 for unbounded)
     pub cache_max_entries: usize,
 }
 
@@ -111,18 +250,25 @@ impl Config {
     /// - `PORT` or `DNS_PORT` - Optional. Defaults to `53`. `PORT` takes precedence.
     /// - `HOST` or `DNS_ADDRESS` - Optional. Defaults to `0.0.0.0`. `HOST` takes precedence.
     /// - `TEMPERATURE` - Optional. Controls randomness (0.0-2.0). Uses model default if not set.
-    /// - `MAX_TOKENS` - Optional. Maximum response length in tokens. Uses model default if not set.
+    /// - `MAX_TOKENS` - Optional. Maximum response length in tokens, at least 1.
+    ///   Uses model default if not set.
     /// - `TOP_P` - Optional. Nucleus sampling parameter (0.0-1.0). Uses model default if not set.
     /// - `TOP_K` - Optional. Top-k sampling parameter. Uses model default if not set.
     /// - `FREQUENCY_PENALTY` - Optional. Reduces repetition (0.0-2.0). Defaults to 0 if not set.
     /// - `PRESENCE_PENALTY` - Optional. Encourages new topics (0.0-2.0). Defaults to 0 if not set.
+    /// - `RATE_LIMIT_RPS` - Optional. Requests per second per IP (default: 5.0, 0 disables).
+    /// - `RATE_LIMIT_BURST` - Optional. Burst requests per IP (default: 10.0, 0 disables).
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - `OPENROUTER_API_KEY` is not set
+    /// - Neither `ANYROUTER_API_KEY` nor `OPENROUTER_API_KEY` is set
+    /// - The API key is blank, contains whitespace, or is still the `.env.example`
+    ///   placeholder
     /// - `PORT` or `DNS_PORT` is not a valid u16
     /// - `OPENROUTER_MODEL` list is empty after parsing
+    /// - A numeric variable is present but cannot be parsed, or falls outside the
+    ///   range documented for it
     ///
     /// # Examples
     ///
@@ -147,13 +293,22 @@ impl Config {
             dotenvy::dotenv().ok();
         }
 
-        // Support ANYROUTER_API_KEY with fallback to OPENROUTER_API_KEY
-        let (openrouter_api_key, is_anyrouter) = if let Ok(key) = env::var("ANYROUTER_API_KEY") {
-            (key, true)
+        // Support ANYROUTER_API_KEY with fallback to OPENROUTER_API_KEY.
+        // A blank ANYROUTER_API_KEY is treated as unset, not as a selection:
+        // deploy tooling used to write an empty one, and honouring it picked
+        // the AnyRouter base URL with no credential, so every call 401'd.
+        let anyrouter_key = env::var("ANYROUTER_API_KEY")
+            .ok()
+            .filter(|key| !key.trim().is_empty());
+        let (openrouter_api_key, is_anyrouter) = if let Some(key) = anyrouter_key {
+            (validate_api_key("ANYROUTER_API_KEY", key)?, true)
         } else {
             let key = env::var("OPENROUTER_API_KEY").context(
                 "Neither ANYROUTER_API_KEY nor OPENROUTER_API_KEY environment variable is set",
             )?;
+            let key = validate_api_key("OPENROUTER_API_KEY", key)?;
+            // AnyRouter keys are recognised by their `sk-ar-` prefix. Selecting
+            // on the trimmed key keeps a pasted credential on the right provider.
             let is_ar = key.starts_with("sk-ar-");
             (key, is_ar)
         };
@@ -212,46 +367,44 @@ impl Config {
             .or_else(|_| env::var("DNS_ADDRESS"))
             .unwrap_or_else(|_| "0.0.0.0".to_string());
 
-        // Load optional OpenRouter model parameters
-        let temperature = env::var("TEMPERATURE").ok().and_then(|s| s.parse().ok());
-        let max_tokens = env::var("MAX_TOKENS").ok().and_then(|s| s.parse().ok());
-        let top_p = env::var("TOP_P").ok().and_then(|s| s.parse().ok());
-        let top_k = env::var("TOP_K").ok().and_then(|s| s.parse().ok());
-        let frequency_penalty = env::var("FREQUENCY_PENALTY")
-            .ok()
-            .and_then(|s| s.parse().ok());
-        let presence_penalty = env::var("PRESENCE_PENALTY")
-            .ok()
-            .and_then(|s| s.parse().ok());
+        // Load optional OpenRouter model parameters. These used to be dropped
+        // outright when they failed to parse, so a typo silently handed the model
+        // default to the provider and a bad value silently reached it.
+        let temperature = parse_optional_f32_in_range("TEMPERATURE", 0.0, 2.0)?;
+        let max_tokens = parse_optional_u32_min("MAX_TOKENS", 1)?;
+        let top_p = parse_optional_f32_in_range("TOP_P", 0.0, 1.0)?;
+        // `TOP_K` keeps only the parse check: providers disagree on whether 0
+        // disables top-k sampling, so it is not treated as a range violation.
+        let top_k = parse_optional_u32("TOP_K")?;
+        let frequency_penalty = parse_optional_f32_in_range("FREQUENCY_PENALTY", 0.0, 2.0)?;
+        let presence_penalty = parse_optional_f32_in_range("PRESENCE_PENALTY", 0.0, 2.0)?;
 
         // Load caching and rate limiting parameters
-        let cache_ttl_seconds = env::var("CACHE_TTL_SEC")
-            .or_else(|_| env::var("DNS_CACHE_TTL"))
-            .unwrap_or_else(|_| "300".to_string())
-            .parse()
-            .unwrap_or(300);
+        let cache_ttl_seconds = parse_env(&["CACHE_TTL_SEC", "DNS_CACHE_TTL"], 300u64)?;
 
-        let rate_limit_rps = env::var("RATE_LIMIT_RPS")
-            .or_else(|_| env::var("DNS_RATE_LIMIT_RPS"))
-            .unwrap_or_else(|_| "5.0".to_string())
-            .parse()
-            .unwrap_or(5.0);
+        // 0 is the documented "disable" sentinel for both rate-limiting knobs.
+        let rate_limit_rps = require_non_negative_finite(
+            "RATE_LIMIT_RPS",
+            parse_env(&["RATE_LIMIT_RPS", "DNS_RATE_LIMIT_RPS"], 5.0f64)?,
+        )?;
+        let rate_limit_burst = require_non_negative_finite(
+            "RATE_LIMIT_BURST",
+            parse_env(&["RATE_LIMIT_BURST", "DNS_RATE_LIMIT_BURST"], 10.0f64)?,
+        )?;
 
-        let rate_limit_burst = env::var("RATE_LIMIT_BURST")
-            .or_else(|_| env::var("DNS_RATE_LIMIT_BURST"))
-            .unwrap_or_else(|_| "10.0".to_string())
-            .parse()
-            .unwrap_or(10.0);
+        // A bucket sized below one whole token can never satisfy the limiter's
+        // `tokens >= 1.0` check, so a sub-1.0 burst refuses every query forever
+        // while the server still logs a healthy startup. 0 stays the "disable"
+        // sentinel.
+        anyhow::ensure!(
+            rate_limit_burst == 0.0 || rate_limit_burst >= 1.0,
+            "RATE_LIMIT_BURST must be 0 (disabled) or at least 1 (got {rate_limit_burst})"
+        );
 
-        let max_concurrent_llm_requests = env::var("MAX_CONCURRENT_LLM_REQUESTS")
-            .unwrap_or_else(|_| "32".to_string())
-            .parse()
-            .unwrap_or(32);
-
-        let cache_max_entries = env::var("CACHE_MAX_ENTRIES")
-            .unwrap_or_else(|_| "10000".to_string())
-            .parse()
-            .unwrap_or(10000);
+        // 0 keeps its documented meaning for both ceilings: no semaphore for
+        // in-flight LLM calls, and an unbounded cache.
+        let max_concurrent_llm_requests = parse_env(&["MAX_CONCURRENT_LLM_REQUESTS"], 32usize)?;
+        let cache_max_entries = parse_env(&["CACHE_MAX_ENTRIES"], 10000usize)?;
 
         Ok(Self {
             openrouter_api_key,
@@ -280,6 +433,88 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::env;
+
+    /// Every variable `Config::from_env` reads, so a test starts from a known
+    /// state instead of inheriting the developer's shell or a variable an
+    /// earlier test leaked.
+    const ALL_CONFIG_VARS: &[&str] = &[
+        "ANYROUTER_API_KEY",
+        "ANYROUTER_MODEL",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MODEL",
+        "SYSTEM_PROMPT",
+        "PORT",
+        "DNS_PORT",
+        "HOST",
+        "DNS_ADDRESS",
+        "TEMPERATURE",
+        "MAX_TOKENS",
+        "TOP_P",
+        "TOP_K",
+        "FREQUENCY_PENALTY",
+        "PRESENCE_PENALTY",
+        "CACHE_TTL_SEC",
+        "DNS_CACHE_TTL",
+        "RATE_LIMIT_RPS",
+        "DNS_RATE_LIMIT_RPS",
+        "RATE_LIMIT_BURST",
+        "DNS_RATE_LIMIT_BURST",
+        "MAX_CONCURRENT_LLM_REQUESTS",
+        "CACHE_MAX_ENTRIES",
+    ];
+
+    /// Applies environment mutations for one test and restores the previous
+    /// values on drop.
+    ///
+    /// The in-repo pattern of `set_var` up front and `remove_var` at the end
+    /// leaks the variable into every later `#[serial]` test whenever an
+    /// assertion panics first, and destroys a developer's real environment for
+    /// the rest of the run. Dropping restores either way.
+    struct ScopedEnv(Vec<(&'static str, Option<String>)>);
+
+    impl ScopedEnv {
+        fn new() -> Self {
+            Self(Vec::new())
+        }
+
+        fn set(&mut self, key: &'static str, value: &str) {
+            self.remember(key);
+            env::set_var(key, value);
+        }
+
+        fn remove(&mut self, key: &'static str) {
+            self.remember(key);
+            env::remove_var(key);
+        }
+
+        fn remember(&mut self, key: &'static str) {
+            if !self.0.iter().any(|(seen, _)| *seen == key) {
+                self.0.push((key, env::var(key).ok()));
+            }
+        }
+    }
+
+    impl Drop for ScopedEnv {
+        fn drop(&mut self) {
+            for (key, previous) in self.0.drain(..) {
+                match previous {
+                    Some(value) => env::set_var(key, value),
+                    None => env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    /// A cleared environment holding only a usable API key, so a test only has
+    /// to state the variable it is actually exercising.
+    fn base_env() -> ScopedEnv {
+        let mut vars = ScopedEnv::new();
+        for key in ALL_CONFIG_VARS {
+            vars.remove(key);
+        }
+        vars.set("OPENROUTER_API_KEY", "test_key");
+        vars
+    }
 
     #[test]
     #[serial]
@@ -568,5 +803,230 @@ mod tests {
 
         env::remove_var("ANYROUTER_API_KEY");
         env::remove_var("ANYROUTER_MODEL");
+    }
+
+    #[test]
+    #[serial]
+    fn test_unparseable_numeric_var_is_a_startup_error() {
+        // These three used to discard their ParseIntError and fall back to the
+        // default with nothing logged, so `MAX_CONCURRENT_LLM_REQUESTS=1O` (letter
+        // O) silently became 32 and the spend ceiling was never applied.
+        let mut vars = base_env();
+        vars.set("MAX_CONCURRENT_LLM_REQUESTS", "1O");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("MAX_CONCURRENT_LLM_REQUESTS"),
+            "error should name the variable, got: {err}"
+        );
+
+        vars.set("MAX_CONCURRENT_LLM_REQUESTS", "32");
+        vars.set("CACHE_MAX_ENTRIES", "ten-thousand");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("CACHE_MAX_ENTRIES"),
+            "error should name the variable, got: {err}"
+        );
+
+        vars.set("CACHE_MAX_ENTRIES", "10000");
+        vars.set("CACHE_TTL_SEC", "5m");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("CACHE_TTL_SEC"),
+            "error should name the variable, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_absent_numeric_var_uses_documented_default() {
+        // The default belongs to an absent variable only: the test above proves
+        // a present-but-unparseable value is an error, this one proves nothing
+        // regressed into a default for a variable nobody set.
+        let _vars = base_env();
+
+        let config = Config::from_env().expect("Failed to load config");
+
+        assert_eq!(config.cache_ttl_seconds, 300);
+        assert_eq!(config.rate_limit_rps, 5.0);
+        assert_eq!(config.rate_limit_burst, 10.0);
+        assert_eq!(config.max_concurrent_llm_requests, 32);
+        assert_eq!(config.cache_max_entries, 10000);
+    }
+
+    #[test]
+    #[serial]
+    fn test_fractional_rate_limit_burst_is_rejected() {
+        // A bucket holding less than one whole token can never reach the
+        // limiter's `tokens >= 1.0` check, so this config refuses 100% of queries
+        // while the server still binds and logs a healthy startup.
+        let mut vars = base_env();
+        vars.set("RATE_LIMIT_BURST", "0.5");
+
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("RATE_LIMIT_BURST"),
+            "error should name the variable, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_non_finite_rate_limit_rps_is_rejected() {
+        // "NaN" parses as a valid f64, and the limiter then behaves as though
+        // limiting were switched off, silently removing the per-IP protection.
+        let mut vars = base_env();
+        vars.set("RATE_LIMIT_RPS", "NaN");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("RATE_LIMIT_RPS"),
+            "error should name the variable, got: {err}"
+        );
+
+        vars.set("RATE_LIMIT_RPS", "-1");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("RATE_LIMIT_RPS"),
+            "error should name the variable, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_out_of_range_model_parameter_is_rejected() {
+        // Each of these reached the provider as-is and made it reject the whole
+        // request, so every query SERVFAILed rather than degrading.
+        let cases = [
+            ("TEMPERATURE", "2.5"),
+            ("TEMPERATURE", "warm"),
+            ("TOP_P", "1.5"),
+            ("FREQUENCY_PENALTY", "2.1"),
+            ("PRESENCE_PENALTY", "-0.1"),
+            ("MAX_TOKENS", "0"),
+        ];
+
+        for (name, value) in cases {
+            let mut vars = base_env();
+            vars.set(name, value);
+
+            let err = Config::from_env()
+                .map(|_| ())
+                .expect_err(&format!("{name}={value} should be rejected"))
+                .to_string();
+            assert!(err.contains(name), "error should name {name}, got: {err}");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_documented_sentinels_are_accepted() {
+        // Zero is documented as "disable" or "unbounded" for these four. Range
+        // validation must never turn a supported value into a startup error.
+        let mut vars = base_env();
+        vars.set("MAX_CONCURRENT_LLM_REQUESTS", "0");
+        vars.set("CACHE_MAX_ENTRIES", "0");
+        vars.set("RATE_LIMIT_RPS", "0");
+        vars.set("RATE_LIMIT_BURST", "0");
+
+        let config = Config::from_env().expect("documented zero sentinels must be accepted");
+
+        assert_eq!(config.max_concurrent_llm_requests, 0);
+        assert_eq!(config.cache_max_entries, 0);
+        assert_eq!(config.rate_limit_rps, 0.0);
+        assert_eq!(config.rate_limit_burst, 0.0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_example_placeholder_api_key_is_rejected() {
+        // `.env.example` ships these verbatim, so accepting them produced a
+        // server that bound, logged "LLM client ready", and then SERVFAILed every
+        // query with only a per-query warn that looked like an upstream outage.
+        let mut vars = base_env();
+        vars.set("OPENROUTER_API_KEY", "your_api_key_here");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("OPENROUTER_API_KEY"),
+            "error should name the variable, got: {err}"
+        );
+
+        vars.set("OPENROUTER_API_KEY", "test_key");
+        vars.set("ANYROUTER_API_KEY", "sk-ar-v1-...");
+        let err = Config::from_env().unwrap_err().to_string();
+        assert!(
+            err.contains("ANYROUTER_API_KEY"),
+            "error should name the variable, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_half_pasted_api_key_is_rejected() {
+        // An interior-whitespace key is a half-pasted credential and
+        // authenticates no better than the placeholder, so it must fail
+        // before the server binds.
+        let mut vars = base_env();
+        vars.set("OPENROUTER_API_KEY", "sk-or-v1 abc def");
+
+        let err = Config::from_env()
+            .map(|_| ())
+            .expect_err("a key with interior whitespace should be rejected")
+            .to_string();
+        assert!(
+            err.contains("OPENROUTER_API_KEY"),
+            "error should name the variable, got: {err}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_blank_anyrouter_api_key_falls_through_instead_of_selecting_anyrouter() {
+        // `install.sh` and `docker-compose.yml` used to write an empty
+        // `ANYROUTER_API_KEY=` into every deployment. Treating that as
+        // "AnyRouter selected" pointed the client at the AnyRouter base URL
+        // with no credential, so every query 401'd. Blank carries no intent,
+        // so it must fall through to the OpenRouter key instead.
+        let mut vars = base_env();
+        vars.set("ANYROUTER_API_KEY", "   ");
+        vars.set("OPENROUTER_API_KEY", "sk-or-v1-real-key");
+
+        let config = Config::from_env().expect("blank ANYROUTER_API_KEY must not be fatal");
+        assert_eq!(config.openrouter_api_key, "sk-or-v1-real-key");
+        assert!(
+            !config.llm_base_url.contains("anyrouter"),
+            "a blank key must not select the AnyRouter endpoint, got: {}",
+            config.llm_base_url
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_api_key_is_trimmed_without_breaking_provider_selection() {
+        // Credentials are routinely pasted with surrounding whitespace. Trimming
+        // must not change which provider a real key selects, in either direction.
+        let mut vars = base_env();
+        vars.set("OPENROUTER_API_KEY", "  sk-ar-v1-real-key  ");
+        let config = Config::from_env().expect("Failed to load config");
+        assert_eq!(config.openrouter_api_key, "sk-ar-v1-real-key");
+        assert_eq!(
+            config.llm_base_url,
+            "https://anyrouter.dev/api/v1/chat/completions"
+        );
+
+        vars.set("OPENROUTER_API_KEY", "  sk-or-v1-real-key  ");
+        let config = Config::from_env().expect("Failed to load config");
+        assert_eq!(config.openrouter_api_key, "sk-or-v1-real-key");
+        assert_eq!(
+            config.llm_base_url,
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+
+        vars.set("ANYROUTER_API_KEY", " sk-ar-v1-real-key ");
+        vars.remove("OPENROUTER_API_KEY");
+        let config = Config::from_env().expect("Failed to load config");
+        assert_eq!(config.openrouter_api_key, "sk-ar-v1-real-key");
+        assert_eq!(
+            config.llm_base_url,
+            "https://anyrouter.dev/api/v1/chat/completions"
+        );
     }
 }
