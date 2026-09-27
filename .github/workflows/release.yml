@@ -11,6 +11,13 @@ on:
         required: true
         type: string
 
+# A re-dispatch of the same ref supersedes the release already in flight, so a
+# bad tag can be re-cut without queueing behind the failed attempt. Tag pushes
+# are not cancelled: the release and its assets are what that push produces.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -24,9 +31,36 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      # Before the checkout, which uses the tag as a git ref. The input and the
+      # ref are passed in through env rather than interpolated into the script,
+      # so a crafted tag cannot execute code in this job, which holds
+      # contents: write.
+      - name: Resolve and validate version
+        id: get_version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_TAG"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          # The expected release tag shape: v1.2.3, with an optional pre-release
+          # suffix. Git allows $( ), backticks, quotes and spaces in a ref name,
+          # and this value is reused as a ref and in output filenames, so reject
+          # anything that is not a plain version tag before it is used.
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::Invalid release tag: '$VERSION'"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -34,17 +68,6 @@ jobs:
           # On workflow_dispatch the default ref is the branch, not the tag, so
           # the changelog and build would come from the wrong commit.
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-
-      - name: Get version from tag
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ inputs.tag }}
-          else
-            VERSION=${GITHUB_REF#refs/tags/}
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Version: ${VERSION}"
 
       - name: Generate changelog
         id: changelog
@@ -76,6 +99,7 @@ jobs:
     name: Build Binary for ${{ matrix.target }}
     needs: create-release
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +141,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
 
+      - name: Select cross linker (Linux arm64)
+        # Without this the aarch64 leg links with the host gcc and fails, so no
+        # arm64 asset is ever produced. Scoped to this job through the
+        # environment rather than a committed .cargo/config.toml, which would
+        # also apply to every local build.
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
@@ -127,14 +160,17 @@ jobs:
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-latest'
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
-          if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
-            strip target/${{ matrix.target }}/release/llm-over-dns
-          elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            strip target/${{ matrix.target }}/release/llm-over-dns
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            strip target/${{ matrix.target }}/release/llm-over-dns
+          # Host binutils cannot read an aarch64 ELF, so that leg needs the cross
+          # toolchain's strip.
+          if [ "$TARGET" = "aarch64-unknown-linux-gnu" ]; then
+            STRIP="aarch64-linux-gnu-strip"
+          else
+            STRIP="strip"
           fi
+          "$STRIP" "target/$TARGET/release/llm-over-dns"
 
       - name: Create archive (Unix)
         if: matrix.os != 'windows-latest'
@@ -172,3 +208,23 @@ jobs:
           files: |
             ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip
             ${{ matrix.name }}-${{ needs.create-release.outputs.version }}.zip.sha256
+
+  # The release is created before the binaries are built, so a matrix leg that
+  # fails leaves a release page that looks complete. This turns that into a red
+  # run instead of a silently missing asset.
+  verify-binaries:
+    name: Verify Release Binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build-binaries
+    if: always()
+    steps:
+      - name: Fail if any target failed
+        env:
+          RESULT: ${{ needs.build-binaries.result }}
+        run: |
+          if [ "$RESULT" != "success" ]; then
+            echo "❌ At least one release target did not succeed (result: $RESULT)"
+            exit 1
+          fi
+          echo "✅ All release targets built and uploaded"

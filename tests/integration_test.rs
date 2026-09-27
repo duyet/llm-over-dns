@@ -819,10 +819,24 @@ async fn test_e2e_empty_llm_response() -> Result<()> {
 
     let query = "test question";
     let prompt = dns_handler.parse_subdomain(query)?;
-    let response = llm_client.query(&prompt).await?;
-    let chunks = chunker.chunk_text(&response);
 
-    // Empty response should result in empty chunks
+    // An empty `content` is not an answer. Returning it as a success produced
+    // a NOERROR with zero answers — indistinguishable from "no such record" —
+    // and that empty answer was then cached for the full TTL, so every retry
+    // was served from the poisoned cache with no LLM call at all. It must be
+    // a model failure, so the fallback chain continues to the next model.
+    let err = llm_client
+        .query(&prompt)
+        .await
+        .expect_err("empty content must not be reported as a successful answer")
+        .to_string();
+    assert!(
+        err.contains("Empty content"),
+        "error should name the empty-content cause, got: {err}"
+    );
+
+    // And an error must never be chunked into a cached answer.
+    let chunks = chunker.chunk_text("");
     assert_eq!(chunks.len(), 0);
 
     Ok(())
