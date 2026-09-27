@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/duyet/herdr-desk/main/herdr-desk.schema.json",
+  "name": "llm-over-dns",
+  "tasks": [
+    {
+      "id": "local:babysit",
+      "label": "Babysit PRs",
+      "playbook": "docs/herdr-desk/babysit-prs.md",
+      "agentName": "lld-babysit",
+      "agent": { "ladder": ["opencode", "claude", "codex"] },
+      "maxChildren": 3,
+      "schedule": "5,35 * * * *",
+      "describe": "Clear red required CI, unblock dep PRs, answer review, arm auto-merge, clean worktrees"
+    },
+    {
+      "id": "desk:github-issues",
+      "label": "Triage issues and PRs",
+      "playbook": "github-issues",
+      "agentName": "lld-desk",
+      "agent": { "ladder": ["opencode", "claude", "codex"] },
+      "maxChildren": 3,
+      "schedule": "0 7 * * *",
+      "describe": "Triage issues/PRs; research first; one child worktree per item",
+      "extra": "Rust project — see CLAUDE.md for architecture and commands. Dependency PRs are owned by Dependabot; this desk babysits and merges them but does not open competing dependency bumps.\n\nResearch before you address: an issue is not ready to implement until you have read the code it names, written the expected behaviour and the verify path into the issue, and confirmed it is not a duplicate or already fixed. If the right output is a decision rather than a diff, write `research-<n>.md` in the run dir and stop.\n\nNever leave a worktree with uncommitted work: commit it on its own branch (local `wip(...)` is fine) before the run ends, and remove a worktree only after proving its branch landed.\n\nState is local; do not commit `.herdr-desk/runs/`."
+    },
+    {
+      "id": "local:improve",
+      "label": "Self improvement",
+      "playbook": "docs/herdr-desk/improve.md",
+      "agentName": "lld-improve",
+      "agent": { "ladder": ["opencode", "claude", "codex"] },
+      "maxChildren": 2,
+      "schedule": "23 2 * * *",
+      "describe": "One theme per night: config validation, UDP budget, error context, coverage, desk health"
+    }
+  ]
+}
