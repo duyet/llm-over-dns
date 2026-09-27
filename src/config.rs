@@ -45,7 +45,7 @@ use std::str::FromStr;
 
 /// Stand-in values shipped in `.env.example`. Either one means the file was
 /// copied but never edited, which must not be mistaken for a real credential.
-const API_KEY_PLACEHOLDERS: &[&str] = &["your_api_key_here", "sk-ar-v1-..."];
+const API_KEY_PLACEHOLDERS: &[&str] = &["your_api_key_here", "sk-ar-REDACTED"];
 
 /// Reads the first of `names` that is present in the environment.
 fn first_env_var(names: &[&str]) -> Option<String> {
@@ -950,7 +950,7 @@ mod tests {
         );
 
         vars.set("OPENROUTER_API_KEY", "test_key");
-        vars.set("ANYROUTER_API_KEY", "sk-ar-v1-...");
+        vars.set("ANYROUTER_API_KEY", "sk-ar-REDACTED");
         let err = Config::from_env().unwrap_err().to_string();
         assert!(
             err.contains("ANYROUTER_API_KEY"),
@@ -987,10 +987,10 @@ mod tests {
         // so it must fall through to the OpenRouter key instead.
         let mut vars = base_env();
         vars.set("ANYROUTER_API_KEY", "   ");
-        vars.set("OPENROUTER_API_KEY", "sk-or-v1-real-key");
+        vars.set("OPENROUTER_API_KEY", "sk-or-TESTKEY");
 
         let config = Config::from_env().expect("blank ANYROUTER_API_KEY must not be fatal");
-        assert_eq!(config.openrouter_api_key, "sk-or-v1-real-key");
+        assert_eq!(config.openrouter_api_key, "sk-or-TESTKEY");
         assert!(
             !config.llm_base_url.contains("anyrouter"),
             "a blank key must not select the AnyRouter endpoint, got: {}",
@@ -1004,26 +1004,26 @@ mod tests {
         // Credentials are routinely pasted with surrounding whitespace. Trimming
         // must not change which provider a real key selects, in either direction.
         let mut vars = base_env();
-        vars.set("OPENROUTER_API_KEY", "  sk-ar-v1-real-key  ");
+        vars.set("OPENROUTER_API_KEY", "  sk-ar-TESTKEY  ");
         let config = Config::from_env().expect("Failed to load config");
-        assert_eq!(config.openrouter_api_key, "sk-ar-v1-real-key");
+        assert_eq!(config.openrouter_api_key, "sk-ar-TESTKEY");
         assert_eq!(
             config.llm_base_url,
             "https://anyrouter.dev/api/v1/chat/completions"
         );
 
-        vars.set("OPENROUTER_API_KEY", "  sk-or-v1-real-key  ");
+        vars.set("OPENROUTER_API_KEY", "  sk-or-TESTKEY  ");
         let config = Config::from_env().expect("Failed to load config");
-        assert_eq!(config.openrouter_api_key, "sk-or-v1-real-key");
+        assert_eq!(config.openrouter_api_key, "sk-or-TESTKEY");
         assert_eq!(
             config.llm_base_url,
             "https://openrouter.ai/api/v1/chat/completions"
         );
 
-        vars.set("ANYROUTER_API_KEY", " sk-ar-v1-real-key ");
+        vars.set("ANYROUTER_API_KEY", " sk-ar-TESTKEY ");
         vars.remove("OPENROUTER_API_KEY");
         let config = Config::from_env().expect("Failed to load config");
-        assert_eq!(config.openrouter_api_key, "sk-ar-v1-real-key");
+        assert_eq!(config.openrouter_api_key, "sk-ar-TESTKEY");
         assert_eq!(
             config.llm_base_url,
             "https://anyrouter.dev/api/v1/chat/completions"
