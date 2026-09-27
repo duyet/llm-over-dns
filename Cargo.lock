@@ -623,7 +623,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto 0.26.2",
  "hickory-resolver",
  "hickory-server",
  "hostname",
@@ -652,7 +652,7 @@ dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
- "hickory-proto 0.26.1",
+ "hickory-proto 0.26.2",
  "idna",
  "ipnet",
  "jni",
@@ -692,9 +692,9 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bab31817bfb44672a252e97fe81cd0c18d1b2cf892108922f6818820df8c643"
+checksum = "7e2da0694c15b44c6f68a6b05e0233617008c54080e31d6eb848d858a9c5b38d"
 dependencies = [
  "data-encoding",
  "idna",
@@ -720,7 +720,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto 0.26.2",
  "ipconfig",
  "ipnet",
  "jni",
@@ -751,7 +751,7 @@ dependencies = [
  "data-encoding",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto 0.26.2",
  "hickory-resolver",
  "ipnet",
  "prefix-trie",
@@ -1135,7 +1135,7 @@ dependencies = [
  "futures",
  "hickory-client",
  "hickory-dns",
- "hickory-proto 0.26.1",
+ "hickory-proto 0.26.2",
  "hickory-server",
  "mockito",
  "pretty_assertions",
