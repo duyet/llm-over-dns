@@ -1,7 +1,17 @@
-use hickory_server::proto::rr::Record;
+use hickory_server::proto::rr::{Name, Record};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use tracing::warn;
+
+/// Longest lifetime the cache grants an entry whose configured TTL is too large
+/// to add to an [`Instant`].
+///
+/// `Instant + Duration` panics once the sum leaves the platform's representable
+/// range, and the TTL arrives from configuration as an unbounded `u64`, so the
+/// cache must be unable to panic on its own. A year outlives any useful DNS
+/// answer, and a shorter fallback would send every query back to the paid LLM.
+const MAX_TTL: Duration = Duration::from_secs(365 * 24 * 60 * 60);
 
 /// Thread-safe in-memory cache for DNS records with TTL support.
 #[derive(Debug)]
@@ -38,15 +48,23 @@ impl DnsCache {
     }
 
     /// Retrieves cached DNS records for a given key if they exist and are not expired.
+    ///
+    /// The returned records are re-stamped with `key`. Lookups are
+    /// case-insensitive, so an entry may have been stored by a query whose
+    /// casing differs from this one; serving the stored owner would answer a
+    /// question with records whose owner name does not match it.
     pub async fn get(&self, key: &str) -> Option<Vec<Record>> {
         let key_lower = key.to_lowercase();
-        let entries = self.entries.read().await;
-        if let Some(entry) = entries.get(&key_lower) {
+        let records = {
+            let entries = self.entries.read().await;
+            let entry = entries.get(&key_lower)?;
             if Instant::now() < entry.expires_at {
-                return Some(entry.records.clone());
+                entry.records.clone()
+            } else {
+                return None;
             }
-        }
-        None
+        };
+        Some(restamp_owner_name(records, key))
     }
 
     /// Caches the given records for the specified key.
@@ -55,7 +73,11 @@ impl DnsCache {
             return;
         }
         let key_lower = key.to_lowercase();
-        let expires_at = Instant::now() + self.ttl;
+        let now = Instant::now();
+        // Adding the TTL directly panics when the sum overflows, which an
+        // unbounded configured TTL can arrange; fall back to the capped
+        // lifetime rather than killing the request task with a panic.
+        let expires_at = now.checked_add(self.ttl).unwrap_or(now + MAX_TTL);
         let entry = CacheEntry {
             records,
             expires_at,
@@ -111,6 +133,33 @@ impl DnsCache {
     }
 }
 
+/// Stamps the looked-up name onto every record of a cache hit.
+///
+/// Keys are built from `Name::to_utf8`, which keeps the casing the client asked
+/// with, and an entry can be filled by a query whose casing differs from the
+/// current one. Serving the stored owner would answer a `what.is.rust.`
+/// question with records owned by `What.Is.Rust.`, which 0x20 case-randomising
+/// validators reject as malformed.
+fn restamp_owner_name(mut records: Vec<Record>, name: &str) -> Vec<Record> {
+    // `from_ascii` is the case-preserving counterpart of `to_utf8`;
+    // `from_utf8` would run the name through IDNA and lowercase it, undoing the
+    // case randomisation the client asked for.
+    let Ok(mut parsed) = Name::from_ascii(name) else {
+        warn!(
+            name,
+            "cache key is not a parsable name; serving stored owner"
+        );
+        return records;
+    };
+    // DNS names on the wire are always absolute, so a key written without a
+    // trailing dot is still the root-relative name.
+    parsed.set_fqdn(true);
+    for record in &mut records {
+        record.name = parsed.clone();
+    }
+    records
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +168,15 @@ mod tests {
 
     fn create_test_record(name_str: &str, text: &str) -> Record {
         let name = Name::from_utf8(name_str).unwrap();
+        let txt = TXT::new(vec![text.to_string()]);
+        Record::from_rdata(name, 300, RData::TXT(txt))
+    }
+
+    /// Builds a record the way the query path does: from the `Name` parsed off
+    /// the wire, which keeps the client's casing. `from_utf8` would run the
+    /// name through IDNA and lowercase it.
+    fn create_test_record_verbatim(name_str: &str, text: &str) -> Record {
+        let name = Name::from_ascii(name_str).unwrap();
         let txt = TXT::new(vec![text.to_string()]);
         Record::from_rdata(name, 300, RData::TXT(txt))
     }
@@ -279,5 +337,99 @@ mod tests {
                 .await;
         }
         assert_eq!(cache.len().await, 100);
+    }
+
+    #[tokio::test]
+    async fn test_extreme_ttl_does_not_panic() {
+        // `Instant + Duration` panics once the sum leaves the platform's
+        // representable range, and the TTL arrives from configuration as an
+        // unbounded u64. Adding it raw panicked the per-request task, so every
+        // query timed out instead of even being answered with SERVFAIL.
+        let cache = DnsCache::new(Duration::from_secs(u64::MAX));
+
+        cache
+            .insert(
+                "example.com",
+                vec![create_test_record("example.com.", "hello")],
+            )
+            .await;
+
+        assert!(
+            cache.get("example.com").await.is_some(),
+            "an unrepresentable TTL should still cache, not panic"
+        );
+
+        // The fallback lifetime is bounded rather than unbounded.
+        let after = Instant::now();
+        let expires_at = cache.entries.read().await["example.com"].expires_at;
+        assert!(
+            expires_at <= after + MAX_TTL,
+            "expiry {:?} is beyond the capped lifetime",
+            expires_at
+        );
+        assert!(expires_at > after, "entry must not be born already expired");
+    }
+
+    #[tokio::test]
+    async fn test_cache_hit_is_served_with_the_queried_name() {
+        // The cache is case-insensitive, so a hit may have been stored by a
+        // query whose casing differs from the current one. Serving the stored
+        // owner name would answer `what.is.rust.` with records owned by
+        // `What.Is.Rust.`, which 0x20 case-randomising validators treat as
+        // malformed.
+        let cache = DnsCache::new(Duration::from_secs(10));
+        cache
+            .insert(
+                "What.Is.Rust.",
+                vec![create_test_record_verbatim(
+                    "What.Is.Rust.",
+                    "systems programming",
+                )],
+            )
+            .await;
+
+        let cached = cache
+            .get("what.is.rust.")
+            .await
+            .expect("case-insensitive cache hit");
+        assert_eq!(cached.len(), 1);
+        assert_eq!(
+            cached[0].name.to_string(),
+            "what.is.rust.",
+            "cached answer was served under the first querier's name"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cache_hit_preserves_casing_that_was_asked_for() {
+        // Re-stamping must follow the name in the lookup, not a lowercased one:
+        // a 0x20-randomised client expects its own casing back.
+        let cache = DnsCache::new(Duration::from_secs(10));
+        cache
+            .insert(
+                "what.is.rust.",
+                vec![create_test_record_verbatim(
+                    "what.is.rust.",
+                    "systems programming",
+                )],
+            )
+            .await;
+
+        let cached = cache.get("WhAt.Is.RuSt.").await.expect("cache hit");
+        assert_eq!(cached[0].name.to_string(), "WhAt.Is.RuSt.");
+    }
+
+    #[tokio::test]
+    async fn test_cache_hit_keeps_stored_owner_when_key_is_not_a_name() {
+        // A key that cannot be parsed back into a DNS name is not reachable
+        // from the query path, but the cache must not drop the answer over it.
+        let cache = DnsCache::new(Duration::from_secs(10));
+        let key = "x".repeat(64); // label longer than the 63 octet limit
+        cache
+            .insert(&key, vec![create_test_record("example.com.", "hello")])
+            .await;
+
+        let cached = cache.get(&key).await.expect("cache hit");
+        assert_eq!(cached[0].name.to_string(), "example.com.");
     }
 }
