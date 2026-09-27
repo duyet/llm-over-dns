@@ -40,10 +40,40 @@ RAW_URL="${RAW_URL:-https://raw.githubusercontent.com/duyet/llm-over-dns/main}"
 DNS_PORT="${DNS_PORT:-5353}"
 ANYROUTER_API_KEY="${ANYROUTER_API_KEY:-}"
 OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
-MODEL="${OPENROUTER_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}"
+# Empty by default. Hard-coding a model here would override the application's own
+# multi-model fallback list, which is a headline feature — so only an explicit
+# --model (or OPENROUTER_MODEL) is written to .env, and otherwise the app default
+# applies. An empty value is NOT equivalent to unset: it yields an empty model
+# list, which aborts startup.
+MODEL="${OPENROUTER_MODEL:-}"
 CACHE_TTL="${CACHE_TTL_SEC:-300}"
 RATE_LIMIT_RPS="${RATE_LIMIT_RPS:-5.0}"
 RATE_LIMIT_BURST="${RATE_LIMIT_BURST:-10.0}"
+# Rewritten by the install path and restored by the uninstall path.
+RESOLVED_CONF="/etc/systemd/resolved.conf"
+
+# Resolve the container runtime and its compose command. Shared with the
+# uninstall path, which runs before the install-time detection below and must
+# never reach `$COMPOSE_CMD down` with an unset command.
+detect_runtime() {
+  RUNTIME=""
+  COMPOSE_CMD=""
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    RUNTIME="docker"
+    if docker compose version >/dev/null 2>&1; then
+      COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+      COMPOSE_CMD="docker-compose"
+    fi
+  elif command -v podman >/dev/null 2>&1; then
+    RUNTIME="podman"
+    if command -v podman-compose >/dev/null 2>&1; then
+      COMPOSE_CMD="podman-compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+      COMPOSE_CMD="docker-compose"
+    fi
+  fi
+}
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
@@ -61,7 +91,8 @@ Usage: install.sh [OPTIONS]
 Options:
   --api-key KEY     AnyRouter API key (or set \$ANYROUTER_API_KEY)
   --openrouter KEY  OpenRouter API key (or set \$OPENROUTER_API_KEY)
-  --model MODEL     LLM model slug (default: nvidia/nemotron-nano-12b-v2-vl:free)
+  --model MODEL     LLM model slug, for the selected provider (default: the
+                    application's multi-model fallback list)
   --port PORT       DNS listen port inside container (default: 5353; host 53->PORT via iptables)
   --dir DIR         Install directory (default: /opt/llm-over-dns)
   --uninstall       Stop and remove the service
@@ -79,12 +110,43 @@ done
 # ─── Uninstall path ──────────────────────────────────────────────────────────
 if [ "${UNINSTALL:-0}" = "1" ]; then
   step "Uninstalling LLM-over-DNS"
-  if [ -d "$INSTALL_DIR" ]; then
-    cd "$INSTALL_DIR"
-    $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+
+  # `rm -rf` below is unguarded, and --dir reaches it: refuse an empty or root
+  # install directory rather than taking the filesystem with it.
+  case "$INSTALL_DIR" in
+    ""|"/") error "Refusing to remove install directory '${INSTALL_DIR}' — pass --dir with a real path." ;;
+  esac
+
+  # Resolve the compose command first. This branch used to run before the
+  # install-time detection assigned it, so "down" expanded to a command with no
+  # program name, failed, and was suppressed — leaving the container running
+  # while the compose file that defines it was deleted.
+  detect_runtime
+  if [ -n "$COMPOSE_CMD" ] && [ -d "$INSTALL_DIR" ]; then
+    # Stop the container before its compose file disappears. Subshell so the
+    # later rm -rf still resolves a relative --dir against the original cwd.
+    ( cd "$INSTALL_DIR" && $COMPOSE_CMD down --remove-orphans ) 2>/dev/null || \
+      warn "Could not stop the container via '${COMPOSE_CMD}'. Stop it manually: docker stop llm-over-dns"
+  elif [ -z "$COMPOSE_CMD" ]; then
+    warn "No container runtime found — the container may still be running. Stop it manually: docker stop llm-over-dns"
   fi
-  iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-port 5353 2>/dev/null || true
-  iptables -t nat -D OUTPUT     -p udp --dport 53 -j REDIRECT --to-port 5353 2>/dev/null || true
+
+  # Remove both chains the install path creates, for the default port and for a
+  # custom one (--port).
+  for port in 5353 "$DNS_PORT"; do
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-port "$port" 2>/dev/null || true
+    iptables -t nat -D OUTPUT     -p udp --dport 53 -j REDIRECT --to-port "$port" 2>/dev/null || true
+  done
+
+  # Hand :53 back to systemd-resolved, which the install path took over.
+  if [ -f "$RESOLVED_CONF" ] && grep -q "^DNSStubListener=no$" "$RESOLVED_CONF" 2>/dev/null; then
+    sed -i '/^DNSStubListener=no$/d' "$RESOLVED_CONF" 2>/dev/null || \
+      warn "Could not restore DNSStubListener in ${RESOLVED_CONF}."
+    systemctl restart systemd-resolved 2>/dev/null || \
+      warn "Could not restart systemd-resolved."
+    info "Restored systemd-resolved DNSStubListener"
+  fi
+
   rm -rf "$INSTALL_DIR"
   success "Uninstalled. DNS rules removed."
   exit 0
@@ -151,24 +213,9 @@ done
 # ─── Detect / install container runtime ───────────────────────────────────────
 step "Detecting container runtime"
 
-COMPOSE_CMD=""
-
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  RUNTIME="docker"
-  info "Found Docker"
-  if docker compose version >/dev/null 2>&1; then
-    COMPOSE_CMD="docker compose"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE_CMD="docker-compose"
-  fi
-elif command -v podman >/dev/null 2>&1; then
-  RUNTIME="podman"
-  info "Found Podman"
-  if command -v podman-compose >/dev/null 2>&1; then
-    COMPOSE_CMD="podman-compose"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE_CMD="docker-compose"
-  fi
+detect_runtime
+if [ -n "$RUNTIME" ]; then
+  info "Found $RUNTIME"
 fi
 
 if [ -z "$RUNTIME" ]; then
@@ -224,7 +271,6 @@ success "Runtime: $RUNTIME  Compose: $COMPOSE_CMD"
 step "Freeing port 53"
 
 if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
-  RESOLVED_CONF="/etc/systemd/resolved.conf"
   if ! grep -q "^DNSStubListener=no" "$RESOLVED_CONF" 2>/dev/null; then
     # Ensure [Resolve] section exists
     if ! grep -q "^\[Resolve\]" "$RESOLVED_CONF" 2>/dev/null; then
@@ -271,11 +317,32 @@ if [ -z "$ANYROUTER_API_KEY" ] && [ -z "$OPENROUTER_API_KEY" ]; then
   fi
 fi
 
-cat > "${INSTALL_DIR}/.env" <<ENV
-# Generated by install.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ)
-ANYROUTER_API_KEY=${ANYROUTER_API_KEY}
-OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-OPENROUTER_MODEL=${MODEL}
+# Write only the variables that are actually set. An empty stub is not
+# equivalent to an absent one: the application treats the *presence* of
+# ANYROUTER_API_KEY as intent to use AnyRouter (so an empty key alongside an
+# OpenRouter key yields 401s on every call), and an empty model list aborts
+# startup. Leaving a variable out lets the application default apply.
+ENV_FILE="${INSTALL_DIR}/.env"
+printf '# Generated by install.sh on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ENV_FILE"
+
+if [ -n "$ANYROUTER_API_KEY" ]; then
+  printf 'ANYROUTER_API_KEY=%s\n' "$ANYROUTER_API_KEY" >> "$ENV_FILE"
+fi
+if [ -n "$OPENROUTER_API_KEY" ]; then
+  printf 'OPENROUTER_API_KEY=%s\n' "$OPENROUTER_API_KEY" >> "$ENV_FILE"
+fi
+# The model list belongs to the active provider: the application reads
+# ANYROUTER_MODEL for AnyRouter and OPENROUTER_MODEL otherwise, and AnyRouter
+# takes precedence when both keys are present.
+if [ -n "$MODEL" ]; then
+  if [ -n "$ANYROUTER_API_KEY" ]; then
+    printf 'ANYROUTER_MODEL=%s\n' "$MODEL" >> "$ENV_FILE"
+  else
+    printf 'OPENROUTER_MODEL=%s\n' "$MODEL" >> "$ENV_FILE"
+  fi
+fi
+
+cat >> "$ENV_FILE" <<ENV
 DNS_ADDRESS=0.0.0.0
 DNS_PORT=${DNS_PORT}
 CACHE_TTL_SEC=${CACHE_TTL}
@@ -299,6 +366,12 @@ step "Setting up iptables port redirect 53 → ${DNS_PORT}"
 iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-port "$DNS_PORT" 2>/dev/null || \
   iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port "$DNS_PORT"
 
+# Locally-originated packets traverse OUTPUT, not PREROUTING, so the matching
+# OUTPUT rule is what makes the host's own resolver — and the verification query
+# below — reach the service. Guarded the same way as PREROUTING.
+iptables -t nat -C OUTPUT -p udp --dport 53 -j REDIRECT --to-port "$DNS_PORT" 2>/dev/null || \
+  iptables -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to-port "$DNS_PORT"
+
 # Persist iptables rules across reboots
 if command -v netfilter-persistent >/dev/null 2>&1; then
   netfilter-persistent save
@@ -317,10 +390,13 @@ fi
 
 # Add to /etc/rc.local as fallback for persistence
 RC_LOCAL="/etc/rc.local"
-IPTR="iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT} 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}"
+# Both chains on one line, and the sed below uses @ as its delimiter: the
+# `||` in the rules would otherwise close the s command early, so the edit
+# failed and the rules were appended after `exit 0`, where rc.local skips them.
+IPTR="iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT} 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}; iptables -t nat -C OUTPUT -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT} 2>/dev/null || iptables -t nat -A OUTPUT -p udp --dport 53 -j REDIRECT --to-port ${DNS_PORT}"
 if [ -f "$RC_LOCAL" ]; then
   if ! grep -q "llm-over-dns" "$RC_LOCAL"; then
-    sed -i "s|^exit 0|# llm-over-dns\n${IPTR}\nexit 0|" "$RC_LOCAL" 2>/dev/null || \
+    sed -i "s@^exit 0@# llm-over-dns\n${IPTR}\nexit 0@" "$RC_LOCAL" 2>/dev/null || \
       echo "$IPTR" >> "$RC_LOCAL"
     info "iptables rule added to $RC_LOCAL"
   fi
@@ -342,15 +418,46 @@ else
   info "Check logs: cd ${INSTALL_DIR} && ${COMPOSE_CMD} logs -f"
 fi
 
-# Quick DNS test
+# Quick DNS test. The answer is a real LLM call, so allow a cold start.
+# The exit status of a pipeline comes from its last command, so the old
+# `... | head -3 || warn` could never fail: `head` always succeeds and the
+# success banner was printed regardless. Capture the answer and decide on that.
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 printf "\n${BOLD}Testing DNS (may take a moment for first query):${RESET}\n"
+
 if command -v dig >/dev/null 2>&1; then
-  dig +short +time=5 TXT "what.is.2+2" "@127.0.0.1" 2>/dev/null | head -3 || \
-    warn "DNS test timed out (normal on first cold start — LLM call in progress)"
+  DNS_TESTED="yes"
+  # dig and nslookup report "connection refused" / "no servers could be
+  # reached" on STDOUT and exit non-zero, so judging the output alone would call
+  # a dead resolver healthy. The exit status is the verdict; keep just the
+  # answer records. The assignment sits in an `if` so `set -e` stands down.
+  if DNS_OUT="$(dig +short +time=15 TXT "what.is.2+2" "@127.0.0.1" 2>/dev/null)"; then
+    DNS_ANSWER="$(printf '%s\n' "$DNS_OUT" | grep -v '^;;')"
+  else
+    DNS_ANSWER=""
+  fi
 elif command -v nslookup >/dev/null 2>&1; then
-  nslookup -type=TXT "what.is.2+2" 127.0.0.1 2>/dev/null | grep -i '"' | head -3 || \
-    warn "DNS test timed out (normal on first cold start)"
+  DNS_TESTED="yes"
+  if DNS_OUT="$(nslookup -type=TXT "what.is.2+2" 127.0.0.1 2>/dev/null)"; then
+    DNS_ANSWER="$(printf '%s\n' "$DNS_OUT" | grep -i '"')"
+  else
+    DNS_ANSWER=""
+  fi
+else
+  DNS_TESTED="no"
+  DNS_ANSWER=""
+  warn "Neither dig nor nslookup is installed — skipping the DNS query test."
+fi
+
+if [ "$DNS_TESTED" = "yes" ]; then
+  if [ -n "$DNS_ANSWER" ]; then
+    printf '%s\n' "$DNS_ANSWER" | head -3
+    success "DNS query answered"
+  else
+    # Fail loudly instead of printing a success banner over a dead service.
+    error "No TXT answer from 127.0.0.1:53 — the DNS service is not responding.
+  Inspect it with: cd ${INSTALL_DIR} && ${COMPOSE_CMD} logs -f"
+  fi
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────

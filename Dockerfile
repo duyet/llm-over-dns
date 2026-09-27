@@ -11,14 +11,26 @@ WORKDIR /build
 # Copy manifest files
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy main to cache dependencies separately from source
+# Create dummy sources to cache dependencies separately from source.
+# The crate declares BOTH a lib (src/lib.rs) and a bin (src/main.rs) target, so
+# a dummy bin alone makes cargo abort before compiling anything. The build is
+# deliberately not piped through `grep ... || true`: a silent failure here means
+# an empty cache layer and a full dependency rebuild on every image build.
 RUN mkdir -p src && \
     echo "fn main() {}" > src/main.rs && \
-    OPENSSL_STATIC=1 cargo build --release 2>&1 | grep -v "warning" || true && \
+    echo "" > src/lib.rs && \
+    OPENSSL_STATIC=1 cargo build --release && \
     rm -rf src
 
 # Copy actual source code
 COPY src ./src
+
+# Cargo keys its rebuild decision on file mtimes. The dummy sources above were
+# created during this build, so their mtimes are newer than the ones COPY
+# restored from the build context — cargo would consider the crate unchanged,
+# keep the dummy artifacts, and ship a stub binary that starts and exits at
+# once. Touching the crate roots marks the real sources as newer.
+RUN find src -name '*.rs' -exec touch {} +
 
 # Build release binary — statically linked against musl + openssl, zero glibc deps
 RUN OPENSSL_STATIC=1 cargo build --release
