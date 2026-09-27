@@ -60,3 +60,6 @@ logs/
 
 # Benchmarking
 /benches/target
+
+# herdr-desk run state (local only; the config is committed, the runs are not)
+.herdr-desk/runs/*/
