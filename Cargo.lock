@@ -24,6 +24,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "array-const-fn-init"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bcb85e548c05d407fa6faff46b750ba287714ef32afc0f5e15b4641ffd6affb"
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -623,7 +629,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hickory-net",
- "hickory-proto 0.26.3",
+ "hickory-proto 0.26.4",
  "hickory-resolver",
  "hickory-server",
  "hostname",
@@ -652,7 +658,7 @@ dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
- "hickory-proto 0.26.3",
+ "hickory-proto 0.26.4",
  "idna",
  "ipnet",
  "jni",
@@ -692,16 +698,16 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.26.3"
+version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12b92608f679a6fa515dd1d15c1ff89443026e391200a2c840c7afcba482893d"
+checksum = "927c672dc4fd1e4b7cfcb7b751fe1d5766638080b8d243b78165ef660c2061e7"
 dependencies = [
  "data-encoding",
  "idna",
  "ipnet",
  "jni",
  "once_cell",
- "prefix-trie",
+ "prefix-trie 0.10.2",
  "rand 0.10.2",
  "ring",
  "serde",
@@ -720,7 +726,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.3",
+ "hickory-proto 0.26.4",
  "ipconfig",
  "ipnet",
  "jni",
@@ -751,10 +757,10 @@ dependencies = [
  "data-encoding",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.3",
+ "hickory-proto 0.26.4",
  "hickory-resolver",
  "ipnet",
- "prefix-trie",
+ "prefix-trie 0.8.4",
  "rusqlite",
  "serde",
  "thiserror",
@@ -1135,7 +1141,7 @@ dependencies = [
  "futures",
  "hickory-client",
  "hickory-dns",
- "hickory-proto 0.26.3",
+ "hickory-proto 0.26.4",
  "hickory-server",
  "mockito",
  "pretty_assertions",
@@ -1380,6 +1386,19 @@ dependencies = [
  "either",
  "ipnet",
  "num-traits",
+]
+
+[[package]]
+name = "prefix-trie"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77fe9ec8fb906114b52bc2e9aa142ac11817d0fcd33a32fb2feb94d823ad9a4d"
+dependencies = [
+ "array-const-fn-init",
+ "either",
+ "ipnet",
+ "num-traits",
+ "smallvec",
 ]
 
 [[package]]
